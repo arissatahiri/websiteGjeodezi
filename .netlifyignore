@@ -1,0 +1,15 @@
+tools/
+*.log
+server-out.log
+server-err.log
+.git/
+.cursor/
+agent-transcripts/
+uploads/
+data/*.db
+data/*.mysql
+README*.md
+HAP-SERVER.bat
+NIS-ADMIN.bat
+start-admin.bat
+start-server.ps1

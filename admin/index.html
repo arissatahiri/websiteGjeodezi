@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paneli — Gjeodeti I.T</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin.css?v=login2" />
+  <link rel="icon" href="../assets/logo.png" type="image/png" />
+</head>
+<body>
+  <div id="loginView" class="login">
+    <div class="login__card" id="apiDownCard" hidden>
+      <img src="../assets/logo-header-white.png?v=2" alt="Gjeodeti I.T" class="login__logo" width="200" height="48" />
+      <h1>Serveri nuk është aktiv</h1>
+      <p class="login__hint" id="apiDownText">
+        API nuk u gjet. Në Netlify duhet deploy i ri; lokalisht hap HAP-SERVER.bat.
+      </p>
+      <ol class="login__steps">
+        <li><strong>Netlify:</strong> bëj deploy (push) dhe hap <code>/admin/</code></li>
+        <li><strong>Lokal:</strong> XAMPP MySQL + <strong>HAP-SERVER.bat</strong></li>
+        <li>Pastaj: <code>http://127.0.0.1:3000/admin/</code></li>
+      </ol>
+      <p class="login__error" id="apiDownError" hidden></p>
+      <button type="button" class="btn btn--primary" id="apiRetryBtn">Provo përsëri</button>
+    </div>
+
+    <form class="login__card" id="loginForm">
+      <img src="../assets/logo-header-white.png?v=2" alt="Gjeodeti I.T" class="login__logo" width="200" height="48" />
+      <h1>Paneli i punës</h1>
+      <p class="login__hint">Vetëm për Gjeodeti I.T</p>
+      <p class="login__ready" id="apiReady">Duke kontrolluar API…</p>
+      <label>
+        <span>Email</span>
+        <input type="email" id="loginEmail" autocomplete="username" required value="tahiriibrahim97@gmail.com" />
+      </label>
+      <label>
+        <span>Fjalëkalimi</span>
+        <div class="pass-field">
+          <input type="password" id="loginPass" autocomplete="current-password" required />
+          <button type="button" class="pass-toggle" id="passToggle" aria-label="Shfaq fjalëkalimin" title="Shfaq / fshih" aria-pressed="false">
+            <svg id="passEyeIcon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </label>
+      <p class="login__error" id="loginError" hidden></p>
+      <p class="login__ok" id="loginOk" hidden></p>
+      <button type="submit" class="btn btn--primary" id="loginBtn">Hyr</button>
+    </form>
+  </div>
+
+  <div id="appView" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__brand">
+        <img src="../assets/logo-header-white.png?v=2" alt="" width="150" height="36" />
+        <span>Admin</span>
+      </div>
+      <nav class="sidebar__nav" id="sideNav">
+        <button type="button" class="nav-item is-active" data-view="dashboard">Përmbledhje</button>
+        <button type="button" class="nav-item" data-view="planner">Plani ditor</button>
+        <button type="button" class="nav-item" data-view="calendar">Kalendari</button>
+        <button type="button" class="nav-item" data-view="clients">Klientët</button>
+        <button type="button" class="nav-item" data-view="messages">Mesazhet <span class="badge" id="badgeMsg" hidden>0</span></button>
+        <button type="button" class="nav-item" data-view="services">Shërbimet</button>
+        <button type="button" class="nav-item" data-view="projects">Projektet</button>
+        <button type="button" class="nav-item" data-view="quotes">Ofertat <span class="badge" id="badgeQuote" hidden>0</span></button>
+        <button type="button" class="nav-item" data-view="gallery">Galeria</button>
+        <button type="button" class="nav-item" data-view="content">Përmbajtja</button>
+        <button type="button" class="nav-item" data-view="settings">Cilësimet</button>
+      </nav>
+      <div class="sidebar__foot">
+        <a href="/" target="_blank" rel="noopener">Shiko website-in</a>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+        <div>
+          <h2 id="pageTitle">Dashboard</h2>
+          <p class="topbar__sub" id="pageSub"></p>
+        </div>
+        <div class="topbar__right">
+          <span class="topbar__date" id="topbarDate"></span>
+          <div class="notify" id="notifyWrap" hidden>
+            <button type="button" class="notify__btn" id="notifyBtn" aria-label="Njoftime">Njoftime <span class="badge" id="badgeNotify">0</span></button>
+            <div class="notify__panel" id="notifyPanel" hidden></div>
+          </div>
+          <span class="admin-name" id="adminName">—</span>
+          <button type="button" class="btn btn--ghost" id="logoutBtn">Dil</button>
+        </div>
+      </header>
+      <main class="main" id="main"></main>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__card" id="modalCard"></div>
+  </div>
+
+  <script src="js/admin.js?v=login5"></script>
+</body>
+</html>

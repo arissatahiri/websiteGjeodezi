@@ -1,0 +1,41 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "npm install --omit=dev"
+
+[build.environment]
+  NODE_VERSION = "20"
+  DB_MODE = "sqlite"
+  SESSION_SECRET = "gjeodeti-change-this-secret-in-netlify-ui"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["sql.js", "@netlify/blobs"]
+
+[functions.api]
+  included_files = [
+    "server/**",
+    "node_modules/sql.js/dist/**"
+  ]
+
+# Proxy API te Function (200 = rewrite, jo redirect browser)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin/"
+  status = 301
+
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"

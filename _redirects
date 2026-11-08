@@ -1,0 +1,2 @@
+# API → Netlify Function (duhet deploy i ri)
+/api/*  /.netlify/functions/api/:splat  200!
