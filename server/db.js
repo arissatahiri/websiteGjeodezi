@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS clients (
   email VARCHAR(191) NULL,
   address TEXT NULL,
   notes TEXT NULL,
+  is_new TINYINT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS services (
@@ -266,6 +267,23 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS app_notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(64) NOT NULL DEFAULT 'info',
+  title VARCHAR(255) NOT NULL,
+  body TEXT NULL,
+  link VARCHAR(512) NULL,
+  is_read TINYINT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  endpoint VARCHAR(768) NOT NULL,
+  subscription_json TEXT NOT NULL,
+  user_agent VARCHAR(512) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_push_endpoint (endpoint(191))
+);
 `;
 
 const SQLITE_SCHEMA = `
@@ -283,6 +301,7 @@ CREATE TABLE IF NOT EXISTS clients (
   email TEXT,
   address TEXT,
   notes TEXT,
+  is_new INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS services (
@@ -380,7 +399,59 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS app_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL DEFAULT 'info',
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint TEXT NOT NULL UNIQUE,
+  subscription_json TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
+
+async function ensureTaskRemindedColumn() {
+  try {
+    if (driver === "mysql") {
+      const cols = await all("SHOW COLUMNS FROM tasks LIKE 'reminded_at'");
+      if (!cols.length) {
+        await run("ALTER TABLE tasks ADD COLUMN reminded_at DATETIME NULL");
+      }
+    } else {
+      const cols = await all("PRAGMA table_info(tasks)");
+      if (!cols.some((c) => c.name === "reminded_at")) {
+        await run("ALTER TABLE tasks ADD COLUMN reminded_at TEXT");
+      }
+    }
+  } catch (err) {
+    console.warn("reminded_at column:", err.message);
+  }
+}
+
+async function ensureClientsNewColumn() {
+  try {
+    if (driver === "mysql") {
+      const cols = await all("SHOW COLUMNS FROM clients LIKE 'is_new'");
+      if (!cols.length) {
+        await run("ALTER TABLE clients ADD COLUMN is_new TINYINT NOT NULL DEFAULT 0");
+      }
+    } else {
+      const cols = await all("PRAGMA table_info(clients)");
+      if (!cols.some((c) => c.name === "is_new")) {
+        await run("ALTER TABLE clients ADD COLUMN is_new INTEGER NOT NULL DEFAULT 0");
+      }
+    }
+  } catch (err) {
+    console.warn("clients.is_new column:", err.message);
+  }
+}
 
 async function initSqlite() {
   driver = "sqlite";
@@ -412,6 +483,8 @@ async function initSqlite() {
   }
 
   await exec(SQLITE_SCHEMA);
+  await ensureTaskRemindedColumn();
+  await ensureClientsNewColumn();
   persist();
   return db;
 }
@@ -427,6 +500,8 @@ async function initMysql() {
   await boot.end();
   pool = mysql.createPool(DB_CONFIG);
   await exec(MYSQL_SCHEMA);
+  await ensureTaskRemindedColumn();
+  await ensureClientsNewColumn();
   console.log(
     `MySQL → ${DB_CONFIG.user}@${DB_CONFIG.host}:${DB_CONFIG.port}/${DB_CONFIG.database}`
   );

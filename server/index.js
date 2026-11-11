@@ -8,15 +8,21 @@ const cors = require("cors");
 const multer = require("multer");
 const { initDb, db, uploadsDir, getDriver } = require("./db");
 const { requireAuth, getAdmin, login, changePassword } = require("./auth");
-const { todayStr, nowLabel } = require("./time");
+const { todayStr, nowLabel, partsInTz } = require("./time");
 const { seedIfNeeded } = require("./bootstrap");
+const {
+  ensureVapid,
+  createNotification,
+  saveSubscription,
+  hasWebPush,
+} = require("./notify");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = path.join(__dirname, "..");
 const IS_NETLIFY = !!(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const SESSION_SECRET =
   process.env.SESSION_SECRET ||
-  (IS_NETLIFY ? "gjeodeti-netlify-dev-secret-change-me" : crypto.randomBytes(32).toString("hex"));
+  (IS_NETLIFY ? "gjeodeti-netlify-dev-secret-change-me" : "gjeodeti-local-dev-secret");
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
@@ -182,7 +188,7 @@ async function createApp(options = {}) {
     res.json({ ok: true, message: "Fjalëkalimi u ndryshua." });
   });
 
-  /* ---------- Public contact → messages ---------- */
+  /* ---------- Public contact → messages + klient ---------- */
   app.post("/api/public/contact", async (req, res) => {
     const name = String(req.body?.name || "").trim();
     const email = String(req.body?.email || "").trim();
@@ -197,7 +203,47 @@ async function createApp(options = {}) {
        VALUES (?, ?, ?, ?, ?, 0)`,
       [name, email, phone, service_interest, message]
     );
-    res.json({ ok: true });
+
+    /* Regjistro / përditëso klientin (si mesazhet) */
+    let client = null;
+    if (email) {
+      client = await db.get("SELECT * FROM clients WHERE email = ? LIMIT 1", [email]);
+    }
+    if (!client && phone && phone !== "—") {
+      client = await db.get("SELECT * FROM clients WHERE phone = ? LIMIT 1", [phone]);
+    }
+    const noteBits = [
+      service_interest ? `Interes: ${service_interest}` : "",
+      message.length > 180 ? `${message.slice(0, 177)}…` : message,
+    ].filter(Boolean);
+    const noteLine = noteBits.join(" · ");
+    if (client) {
+      const mergedNotes = [client.notes || "", noteLine].filter(Boolean).join("\n").slice(0, 2000);
+      await db.run(
+        `UPDATE clients SET
+          full_name = ?,
+          phone = COALESCE(NULLIF(?, ''), phone),
+          email = COALESCE(NULLIF(?, ''), email),
+          notes = ?,
+          is_new = 1
+         WHERE id = ?`,
+        [name, phone === "—" ? "" : phone, email, mergedNotes, client.id]
+      );
+    } else {
+      await db.run(
+        `INSERT INTO clients (full_name, phone, email, address, notes, is_new) VALUES (?,?,?,?,?,1)`,
+        [name, phone === "—" ? "" : phone, email, "", noteLine]
+      );
+    }
+
+    const preview = message.length > 120 ? `${message.slice(0, 117)}…` : message;
+    await createNotification({
+      type: "contact",
+      title: `Kontakt i ri: ${name}`,
+      body: [phone, email, preview].filter(Boolean).join(" · "),
+      link: "/admin/#messages",
+    });
+    res.json({ ok: true, notified: true, clientSaved: true });
   });
 
   app.get("/api/public/services", async (req, res) => {
@@ -235,6 +281,7 @@ async function createApp(options = {}) {
     })();
     const stats = {
       clientsTotal: Number((await db.get("SELECT COUNT(*) AS c FROM clients"))?.c || 0),
+      clientsNew: Number((await db.get("SELECT COUNT(*) AS c FROM clients WHERE is_new = 1"))?.c || 0),
       messagesTotal: Number((await db.get("SELECT COUNT(*) AS c FROM messages"))?.c || 0),
       messagesUnread: Number((await db.get("SELECT COUNT(*) AS c FROM messages WHERE is_read = 0"))?.c || 0),
       quotesNew: Number((await db.get("SELECT COUNT(*) AS c FROM quote_requests WHERE status = 'e_re'"))?.c || 0),
@@ -261,9 +308,19 @@ async function createApp(options = {}) {
          WHERE status != 'done' AND task_date < ?`,
         [today]
       ))?.c || 0),
+      galleryCount: Number((await db.get(
+        "SELECT COUNT(*) AS c FROM gallery WHERE is_active = 1"
+      ))?.c || 0),
+      projectsTotal: Number((await db.get("SELECT COUNT(*) AS c FROM projects"))?.c || 0),
     };
 
     const notifications = [];
+    if (stats.clientsNew) {
+      notifications.push({
+        type: "client",
+        text: `${stats.clientsNew} klientë të rinj`,
+      });
+    }
     if (stats.messagesUnread) {
       notifications.push({
         type: "message",
@@ -289,10 +346,23 @@ async function createApp(options = {}) {
       });
     }
 
+    const appNotes = await db.all(
+      "SELECT * FROM app_notifications WHERE is_read = 0 ORDER BY id DESC LIMIT 25"
+    );
+    for (const n of appNotes) {
+      notifications.unshift({
+        type: n.type || "info",
+        text: n.body ? `${n.title}: ${n.body}` : n.title,
+        id: n.id,
+        link: n.link || "",
+      });
+    }
+
     res.json({
       now: nowLabel(),
       stats,
       notifications,
+      appNotifications: appNotes,
       todayTasks: await db.all(
         `SELECT * FROM tasks WHERE task_date = ? ORDER BY COALESCE(start_time,'99:99'), id`,
         [today]
@@ -460,11 +530,15 @@ async function createApp(options = {}) {
     const existing = await db.get("SELECT * FROM tasks WHERE id = ?", [id]);
     if (!existing) return res.status(404).json({ error: "Detyra nuk u gjet." });
     const b = { ...existing, ...req.body, id };
+    const timeChanged =
+      String(existing.task_date) !== String(b.task_date) ||
+      String(existing.start_time || "") !== String(b.start_time || "");
     await db.run(
       `UPDATE tasks SET
         title=?, description=?, task_date=?, start_time=?, end_time=?,
         priority=?, status=?, location=?, client_name=?, client_phone=?,
         client_id=?, project_id=?, notes=?, is_recurring=?, recur_rule=?,
+        reminded_at=${timeChanged ? "NULL" : "reminded_at"},
         updated_at=datetime('now')
        WHERE id=?`,
       [
@@ -492,6 +566,100 @@ async function createApp(options = {}) {
   app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
     await db.run("DELETE FROM tasks WHERE id = ?", [num(req.params.id)]);
     res.json({ ok: true });
+  });
+
+  /* ---------- Push + njoftime (telefon) ---------- */
+  app.get("/api/push/vapid-public", requireAuth, async (req, res) => {
+    if (!hasWebPush()) {
+      return res.status(503).json({ error: "web-push nuk është instaluar në server." });
+    }
+    const keys = await ensureVapid();
+    res.json({ publicKey: keys.publicKey });
+  });
+
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    const id = await saveSubscription(req.body?.subscription, req.headers["user-agent"] || "");
+    res.json({ ok: true, id });
+  });
+
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    const sinceId = num(req.query.since, 0);
+    const unreadOnly = String(req.query.unread || "") === "1";
+    let sql = "SELECT * FROM app_notifications WHERE 1=1";
+    const params = [];
+    if (sinceId) {
+      sql += " AND id > ?";
+      params.push(sinceId);
+    }
+    if (unreadOnly) sql += " AND is_read = 0";
+    sql += " ORDER BY id DESC LIMIT 40";
+    res.json(await db.all(sql, params));
+  });
+
+  app.post("/api/notifications/read", requireAuth, async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(num) : [];
+    if (ids.length) {
+      const ph = ids.map(() => "?").join(",");
+      await db.run(`UPDATE app_notifications SET is_read = 1 WHERE id IN (${ph})`, ids);
+    } else {
+      await db.run("UPDATE app_notifications SET is_read = 1 WHERE is_read = 0");
+    }
+    res.json({ ok: true });
+  });
+
+  app.get("/api/tasks/week", requireAuth, async (req, res) => {
+    const start = String(req.query.start || todayStr());
+    const d0 = new Date(`${start}T12:00:00`);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(d0);
+      d.setDate(d0.getDate() + i);
+      days.push(todayStr(d));
+    }
+    const tasks = await db.all(
+      `SELECT * FROM tasks WHERE task_date >= ? AND task_date <= ? ORDER BY task_date, COALESCE(start_time,'99:99'), id`,
+      [days[0], days[6]]
+    );
+    res.json({ start: days[0], end: days[6], days, tasks });
+  });
+
+  async function processDueTaskReminders() {
+    const today = todayStr();
+    const p = partsInTz();
+    const nowHm = `${p.hour}:${p.minute}`;
+    const tasks = await db.all(
+      `SELECT * FROM tasks
+       WHERE task_date = ? AND status != 'done'
+         AND start_time IS NOT NULL AND start_time != ''
+         AND reminded_at IS NULL`,
+      [today]
+    );
+    const fired = [];
+    for (const t of tasks) {
+      const start = String(t.start_time || "").slice(0, 5);
+      if (!/^\d{2}:\d{2}$/.test(start)) continue;
+      /* njoftim ~10 min para, ose deri 30 min pasi ka filluar */
+      const [sh, sm] = start.split(":").map(Number);
+      const startMins = sh * 60 + sm;
+      const [nh, nm] = nowHm.split(":").map(Number);
+      const nowMins = nh * 60 + nm;
+      const diff = startMins - nowMins;
+      if (diff > 10 || diff < -30) continue;
+      await db.run("UPDATE tasks SET reminded_at = datetime('now') WHERE id = ?", [t.id]);
+      await createNotification({
+        type: "task",
+        title: `Plani: ${t.title}`,
+        body: `${start}${t.location ? ` · ${t.location}` : ""}${t.client_name ? ` · ${t.client_name}` : ""}`,
+        link: "/admin/#week",
+      });
+      fired.push(t.id);
+    }
+    return fired;
+  }
+
+  app.post("/api/tasks/check-reminders", requireAuth, async (req, res) => {
+    const fired = await processDueTaskReminders();
+    res.json({ ok: true, fired: fired.length, ids: fired });
   });
 
   /* ---------- Messages ---------- */
@@ -536,14 +704,28 @@ async function createApp(options = {}) {
       const like = `%${q}%`;
       params.push(like, like, like);
     }
-    sql += " ORDER BY created_at DESC";
+    sql += " ORDER BY is_new DESC, created_at DESC";
     res.json(await db.all(sql, params));
+  });
+
+  app.post("/api/clients/mark-seen", requireAuth, async (req, res) => {
+    const id = num(req.body?.id, 0);
+    if (id) {
+      await db.run("UPDATE clients SET is_new = 0 WHERE id = ?", [id]);
+    } else {
+      await db.run("UPDATE clients SET is_new = 0 WHERE is_new = 1");
+    }
+    res.json({ ok: true });
   });
 
   app.get("/api/clients/:id", requireAuth, async (req, res) => {
     const id = num(req.params.id);
     const client = await db.get("SELECT * FROM clients WHERE id = ?", [id]);
     if (!client) return res.status(404).json({ error: "Klienti nuk u gjet." });
+    if (Number(client.is_new)) {
+      await db.run("UPDATE clients SET is_new = 0 WHERE id = ?", [id]);
+      client.is_new = 0;
+    }
     res.json({
       client,
       projects: await db.all("SELECT * FROM projects WHERE client_id = ? ORDER BY id DESC", [id]),
@@ -556,7 +738,7 @@ async function createApp(options = {}) {
     const b = req.body || {};
     if (!b.full_name) return res.status(400).json({ error: "Emri është i detyrueshëm." });
     await db.run(
-      `INSERT INTO clients (full_name, phone, email, address, notes) VALUES (?,?,?,?,?)`,
+      `INSERT INTO clients (full_name, phone, email, address, notes, is_new) VALUES (?,?,?,?,?,0)`,
       [b.full_name.trim(), b.phone || "", b.email || "", b.address || "", b.notes || ""]
     );
     res.status(201).json(await db.get("SELECT * FROM clients ORDER BY id DESC LIMIT 1"));
@@ -847,7 +1029,20 @@ async function createApp(options = {}) {
     app.get(["/admin", "/admin/"], (req, res) => {
       res.sendFile(path.join(ROOT, "admin", "index.html"));
     });
-    app.use("/admin", express.static(path.join(ROOT, "admin")));
+    app.use(
+      "/admin",
+      express.static(path.join(ROOT, "admin"), {
+        setHeaders(res, filePath) {
+          if (filePath.endsWith("sw.js")) {
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Service-Worker-Allowed", "/admin/");
+          }
+          if (filePath.endsWith(".webmanifest")) {
+            res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+          }
+        },
+      })
+    );
     app.get(/^\/admin\/.*/, (req, res, next) => {
       if (req.path.includes(".")) return next();
       res.sendFile(path.join(ROOT, "admin", "index.html"));
@@ -867,6 +1062,14 @@ async function createApp(options = {}) {
     }
     res.status(500).send("Gabim i brendshëm.");
   });
+
+  if (!IS_NETLIFY) {
+    setInterval(() => {
+      processDueTaskReminders().catch((err) => {
+        console.warn("reminder check:", err.message);
+      });
+    }, 60 * 1000);
+  }
 
   return app;
 }
@@ -896,6 +1099,7 @@ async function main() {
     console.log(`Gjeodeti I.T → http://127.0.0.1:${PORT}/`);
     if (ip) console.log(`Në telefon/LAN → http://${ip}:${PORT}/  (i njëjti WiFi)`);
     console.log(`Admin         → http://127.0.0.1:${PORT}/admin/`);
+    console.log("Njoftimet e planit kontrollohen çdo 60s.");
   });
 }
 

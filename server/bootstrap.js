@@ -11,8 +11,7 @@ const DEFAULT_SERVICES = [
   { title: "Ri-rregullim i kufirit", description: "Rregullim dhe verifikim i kufijve të pronës.", category: "Matje", sort_order: 3 },
   { title: "Caktim i kufijve", description: "Përcaktim i saktë i kufijve në terren.", category: "Matje", sort_order: 4 },
   { title: "Matje ndërtesash", description: "Matje teknike të ndërtesave dhe objekteve.", category: "Matje", sort_order: 5 },
-  { title: "Legalizim", description: "Mbështetje e plotë për legalizimin e ndërtimeve.", category: "Legalizim", sort_order: 6 },
-  { title: "Projektim & mbikëqyrje", description: "Projektim gjeodezik dhe mbikëqyrje profesionale.", category: "Projektim", sort_order: 7 },
+  { title: "Projektim & mbikëqyrje", description: "Projektim gjeodezik dhe mbikëqyrje profesionale.", category: "Projektim", sort_order: 6 },
 ];
 
 const DEFAULT_GALLERY = [

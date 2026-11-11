@@ -36,37 +36,172 @@
     ...readCms(CMS.content, {}),
   };
 
-  const applyCmsServices = () => {
-    const list = readCms(CMS.services, null);
-    const wrap = document.querySelector(".services__pills");
+  const SVC_ICONS = [
+    '<path d="M8 4h8l2 4H6l2-4z"/><path d="M6 8h12v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 12h6M9 15h4"/>',
+    '<path d="M7 7h4v4H7zM13 13h4v4h-4z"/><path d="M11 9h2v6h-2z"/>',
+    '<path d="M4 19V5l8-2 8 2v14l-8 2-8-2z"/><path d="M12 3v18M4 12h16"/>',
+    '<path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    '<path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/>',
+    '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    '<path d="M4 19h16"/><path d="M7 19V9l5-3 5 3v10"/><path d="M9 12h2M13 12h2M9 15h2M13 15h2"/>',
+  ];
+  const escHtml = (v) =>
+    String(v || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  const renderServicesGrid = (list) => {
+    const wrap = document.querySelector(".services__grid");
     if (!wrap || !Array.isArray(list) || !list.length) return;
     wrap.innerHTML = list
-      .map((name) => {
-        const href = /legalizim/i.test(name) ? "#legalizimi" : "#kontakti";
-        return `<a class="svc-pill reveal is-visible" href="${href}">${String(name)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")}</a>`;
+      .map((item, i) => {
+        const title = typeof item === "string" ? item : item.title || item.name || "";
+        const desc = typeof item === "string" ? "" : item.description || item.desc || "";
+        const icon = SVC_ICONS[i % SVC_ICONS.length];
+        return `<a class="svc-tile reveal" href="#kontakti">
+          <span class="svc-tile__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${icon}</svg>
+          </span>
+          <h3 class="svc-tile__title">${escHtml(title)}</h3>
+          ${desc ? `<p class="svc-tile__text">${escHtml(desc)}</p>` : ""}
+        </a>`;
       })
       .join("");
+    if (typeof window.__armSvcTiles === "function") window.__armSvcTiles();
+    if (typeof window.__observeSvcTiles === "function") window.__observeSvcTiles();
+  };
+  const withoutLegalization = (list) =>
+    (Array.isArray(list) ? list : []).filter(
+      (item) => !/legaliz/i.test(typeof item === "string" ? item : item.title || item.name || "")
+    );
+  const applyCmsServices = () => {
+    const list = withoutLegalization(readCms(CMS.services, null));
+    if (!list.length) return;
+    renderServicesGrid(list);
   };
 
-  const applyCmsGallery = () => {
+  const galleryMarquee = document.querySelector(".gallery__marquee");
+  const galleryLightbox = document.getElementById("galleryLightbox");
+  const galleryLightboxImg = document.getElementById("galleryLightboxImg");
+  const galleryLightboxClose = document.getElementById("galleryLightboxClose");
+  const galleryLightboxPrev = document.getElementById("galleryLightboxPrev");
+  const galleryLightboxNext = document.getElementById("galleryLightboxNext");
+  let galleryIndex = 0;
+
+  const normalizeGallerySrc = (src) => {
+    const s = String(src || "").trim();
+    if (!s) return "";
+    if (/^(https?:|assets\/|\.\/)/i.test(s)) return s;
+    return `/${s.replace(/^\/+/, "")}`;
+  };
+  const originalGalleryItems = () =>
+    [...(galleryTrack?.querySelectorAll(".gallery__item:not([data-clone='1'])") || [])];
+  const gallerySources = () =>
+    originalGalleryItems().map((item) => {
+      const img = item.querySelector("img");
+      return { src: img?.getAttribute("src") || img?.src || "", alt: img?.alt || "" };
+    });
+
+  const setupGalleryMarquee = () => {
     if (!galleryTrack) return;
+    galleryTrack.querySelectorAll(".gallery__item[data-clone='1']").forEach((el) => el.remove());
+    originalGalleryItems().forEach((item) => {
+      const clone = item.cloneNode(true);
+      clone.setAttribute("data-clone", "1");
+      clone.setAttribute("aria-hidden", "true");
+      clone.tabIndex = -1;
+      galleryTrack.appendChild(clone);
+    });
+  };
+
+  const openLightbox = (index) => {
+    const list = gallerySources();
+    if (!galleryLightbox || !galleryLightboxImg || !list.length) return;
+    galleryIndex = ((index % list.length) + list.length) % list.length;
+    const current = list[galleryIndex];
+    galleryLightboxImg.src = current.src;
+    galleryLightboxImg.alt = current.alt;
+    galleryLightbox.hidden = false;
+    document.body.style.overflow = "hidden";
+    galleryMarquee?.classList.add("is-paused");
+  };
+
+  const closeLightbox = () => {
+    if (!galleryLightbox) return;
+    galleryLightbox.hidden = true;
+    galleryLightboxImg?.removeAttribute("src");
+    document.body.style.overflow = "";
+    galleryMarquee?.classList.remove("is-paused");
+  };
+
+  const stepLightbox = (dir) => openLightbox(galleryIndex + dir);
+
+  let galleryCenterRaf = 0;
+  const updateGalleryCenter = () => {
+    if (!galleryMarquee || !galleryTrack) return;
+    const mid = galleryMarquee.getBoundingClientRect().left + galleryMarquee.clientWidth / 2;
+    let best = null;
+    let bestDist = Infinity;
+    galleryTrack.querySelectorAll(".gallery__item").forEach((item) => {
+      const rect = item.getBoundingClientRect();
+      const center = rect.left + rect.width / 2;
+      const dist = Math.abs(center - mid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = item;
+      }
+    });
+    galleryTrack.querySelectorAll(".gallery__item.is-center").forEach((el) => {
+      if (el !== best) el.classList.remove("is-center");
+    });
+    best?.classList.add("is-center");
+  };
+  const startGalleryCenterWatch = () => {
+    if (galleryCenterRaf) cancelAnimationFrame(galleryCenterRaf);
+    const tick = () => {
+      updateGalleryCenter();
+      galleryCenterRaf = requestAnimationFrame(tick);
+    };
+    galleryCenterRaf = requestAnimationFrame(tick);
+  };
+
+  const bindGalleryInteractions = () => {
+    setupGalleryMarquee();
+    galleryTrack?.querySelectorAll(".gallery__item").forEach((item) => {
+      const isClone = item.getAttribute("data-clone") === "1";
+      const index = Number(item.dataset.galleryIndex || 0);
+      item.onclick = () => openLightbox(index);
+      if (isClone) item.tabIndex = -1;
+    });
+    startGalleryCenterWatch();
+  };
+
+  const renderGalleryItems = (list) => {
+    if (!galleryTrack || !Array.isArray(list) || !list.length) return;
+    galleryTrack.innerHTML = list
+      .map((item, index) => {
+        const raw = typeof item === "string" ? item : item.src || item.image_path || "";
+        const src = normalizeGallerySrc(raw);
+        const alt = String((typeof item === "object" && (item.alt || item.alt_text)) || "")
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;");
+        return `<button type="button" class="gallery__item" data-gallery-index="${index}"><img src="${src}" alt="${alt}" loading="lazy" /></button>`;
+      })
+      .join("");
+    bindGalleryInteractions();
+  };
+  const applyCmsGallery = () => {
     const list = readCms(CMS.gallery, null);
     if (!Array.isArray(list) || !list.length) return;
-    const active = list.filter((x) => x && x.active !== false && x.src);
+    const active = list.filter((x) => {
+      if (!x || x.active === false) return false;
+      const src = typeof x === "string" ? x : x.src || "";
+      if (!src) return false;
+      return !/teren-09/i.test(src);
+    });
     if (!active.length) return;
-    galleryTrack.innerHTML = active
-      .map(
-        (item) =>
-          `<figure class="gallery__item is-visible"><img src="${item.src}" alt="${String(
-            item.alt || ""
-          )
-            .replace(/&/g, "&amp;")
-            .replace(/"/g, "&quot;")}" loading="lazy" /></figure>`
-      )
-      .join("");
+    renderGalleryItems(active);
   };
 
   const applyCmsContent = () => {
@@ -89,12 +224,6 @@
     });
     const hoursEl = document.querySelector('[data-i18n="contact.hoursVal"]');
     if (hoursEl && hours) hoursEl.textContent = hours;
-    document.querySelectorAll(".legal-card__phone, a.legal-card__tel").forEach((el) => {
-      if (el.tagName === "A") {
-        el.href = `https://wa.me/${wa}`;
-        el.textContent = phone;
-      }
-    });
   };
 
   applyCmsServices();
@@ -126,30 +255,17 @@
         }
       }
       if (Array.isArray(servicesRes) && servicesRes.length) {
-        const wrap = document.querySelector(".services__pills");
-        if (wrap) {
-          wrap.innerHTML = servicesRes
-            .map((s) => {
-              const name = s.title || s.name || "";
-              const href = /legalizim/i.test(name) ? "#legalizimi" : "#kontakti";
-              return `<a class="svc-pill reveal is-visible" href="${href}">${String(name)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")}</a>`;
-            })
-            .join("");
-        }
+        renderServicesGrid(withoutLegalization(servicesRes));
       }
       if (Array.isArray(galleryRes) && galleryRes.length && galleryTrack) {
-        galleryTrack.innerHTML = galleryRes
-          .map((item) => {
-            const src = `/${String(item.image_path).replace(/^\/+/, "")}`;
-            const alt = String(item.alt_text || "")
-              .replace(/&/g, "&amp;")
-              .replace(/"/g, "&quot;");
-            return `<figure class="gallery__item is-visible"><img src="${src}" alt="${alt}" loading="lazy" /></figure>`;
-          })
-          .join("");
+        renderGalleryItems(
+          galleryRes
+            .filter((item) => !/teren-09/i.test(String(item.image_path || "")))
+            .map((item) => ({
+              src: `/${String(item.image_path).replace(/^\/+/, "")}`,
+              alt: item.alt_text || "",
+            }))
+        );
       }
     } catch {
       /* static fallback already applied */
@@ -300,10 +416,16 @@
     el.classList.add("reveal--left");
     el.style.transitionDelay = `${i * 0.1}s`;
   });
-  document.querySelectorAll(".svc-pill.reveal").forEach((pill, i) => {
-    pill.classList.add("reveal--up");
-    pill.style.transitionDelay = `${i * 0.04}s`;
-  });
+  const armSvcTiles = (root = document) => {
+    const dirs = ["reveal--slide-up", "reveal--slide-left", "reveal--slide-right"];
+    root.querySelectorAll(".svc-tile.reveal").forEach((tile, i) => {
+      tile.classList.remove("reveal--up", "reveal--left", "reveal--right", ...dirs);
+      tile.classList.add(dirs[i % dirs.length]);
+      tile.style.transitionDelay = `${0.08 + i * 0.1}s`;
+    });
+  };
+  armSvcTiles();
+  window.__armSvcTiles = armSvcTiles;
   document.querySelectorAll(".value.reveal").forEach((el, i) => {
     el.classList.add("reveal--up");
     el.style.transitionDelay = `${i * 0.1}s`;
@@ -312,7 +434,7 @@
     el.classList.add("is-visible");
     el.classList.remove("reveal");
   });
-  document.querySelectorAll(".legal .reveal, .cta .reveal, .contact .reveal").forEach((el, i) => {
+  document.querySelectorAll(".cta .reveal, .contact .reveal").forEach((el, i) => {
     if (!el.classList.contains("reveal--left") && !el.classList.contains("reveal--right")) {
       el.classList.add(i % 2 === 0 ? "reveal--up" : "reveal--left");
     }
@@ -331,6 +453,9 @@
       },
       { threshold: 0.08, rootMargin: "0px 0px -8% 0px" }
     );
+    window.__observeSvcTiles = () => {
+      document.querySelectorAll(".svc-tile.reveal:not(.is-visible)").forEach((el) => io.observe(el));
+    };
     reveals.forEach((el) => {
       if (!el.closest(".hero")) io.observe(el);
       else el.classList.add("is-visible");
@@ -339,148 +464,19 @@
     reveals.forEach((el) => el.classList.add("is-visible"));
   }
 
-  /* Gallery — autoplay only, no drag / manual controls */
-  if (galleryTrack) {
-    const originals = [...galleryTrack.querySelectorAll(".gallery__item")];
-    const n = originals.length;
-    let galleryIndex = 0;
-    let galleryTimer = null;
-    let wrapping = false;
-    const AUTO_MS = 3000;
-
-    originals.forEach((item) => {
-      const clone = item.cloneNode(true);
-      clone.setAttribute("aria-hidden", "true");
-      clone.classList.remove("reveal");
-      clone.classList.add("is-visible");
-      galleryTrack.appendChild(clone);
-    });
-
-    const stepWidth = () => {
-      if (!originals[0]) return 0;
-      const styles = window.getComputedStyle(galleryTrack);
-      const gap = parseFloat(styles.columnGap || styles.gap) || 16;
-      return originals[0].getBoundingClientRect().width + gap;
-    };
-
-    const setTransform = (index, instant) => {
-      if (instant) galleryTrack.classList.add("is-instant");
-      galleryTrack.style.transform = `translate3d(-${index * stepWidth()}px, 0, 0)`;
-      if (instant) {
-        void galleryTrack.offsetWidth;
-        galleryTrack.classList.remove("is-instant");
-      }
-    };
-
-    const finishWrap = () => {
-      if (!wrapping) return;
-      wrapping = false;
-      galleryIndex = galleryIndex % n;
-      setTransform(galleryIndex, true);
-    };
-
-    const advance = () => {
-      if (!n || wrapping) return;
-      galleryIndex += 1;
-      setTransform(galleryIndex, false);
-      if (galleryIndex >= n) {
-        wrapping = true;
-        let wrapFallback = 0;
-        const onEnd = (e) => {
-          if (e.propertyName && e.propertyName !== "transform") return;
-          galleryTrack.removeEventListener("transitionend", onEnd);
-          window.clearTimeout(wrapFallback);
-          finishWrap();
-        };
-        galleryTrack.addEventListener("transitionend", onEnd);
-        wrapFallback = window.setTimeout(() => {
-          galleryTrack.removeEventListener("transitionend", onEnd);
-          finishWrap();
-        }, 700);
-      }
-    };
-
-    const stopAuto = () => {
-      if (galleryTimer) {
-        clearInterval(galleryTimer);
-        galleryTimer = null;
-      }
-    };
-
-    const startAuto = () => {
-      stopAuto();
-      if (n < 2) return;
-      galleryTimer = window.setInterval(advance, AUTO_MS);
-    };
-
-    let resizeTimer = null;
-    window.addEventListener("resize", () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        if (galleryIndex >= n) galleryIndex = galleryIndex % n;
-        setTransform(galleryIndex, true);
-      }, 120);
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stopAuto();
-      else startAuto();
-    });
-
-    setTransform(0, true);
-    startAuto();
-  }
-
-  /* Legal flyer slider */
-  const legalSlides = [...document.querySelectorAll("[data-legal-slide]")];
-  const legalDots = document.getElementById("legalDots");
-  const legalPrev = document.getElementById("legalPrev");
-  const legalNext = document.getElementById("legalNext");
-  let legalIndex = 0;
-  let legalTimer;
-
-  function showLegalSlide(i) {
-    if (!legalSlides.length) return;
-    legalIndex = (i + legalSlides.length) % legalSlides.length;
-    legalSlides.forEach((slide, idx) => {
-      const on = idx === legalIndex;
-      slide.hidden = !on;
-      slide.classList.toggle("is-active", on);
-    });
-    legalDots?.querySelectorAll("button").forEach((dot, idx) => {
-      dot.classList.toggle("is-active", idx === legalIndex);
-    });
-  }
-
-  function startLegalAuto() {
-    clearInterval(legalTimer);
-    if (legalSlides.length < 2) return;
-    legalTimer = setInterval(() => showLegalSlide(legalIndex + 1), 5500);
-  }
-
-  if (legalSlides.length && legalDots) {
-    legalSlides.forEach((_, i) => {
-      const dot = document.createElement("button");
-      dot.type = "button";
-      dot.setAttribute("aria-label", `Legal slide ${i + 1}`);
-      if (i === 0) dot.classList.add("is-active");
-      dot.addEventListener("click", () => {
-        showLegalSlide(i);
-        startLegalAuto();
-      });
-      legalDots.appendChild(dot);
-    });
-    legalPrev?.addEventListener("click", () => {
-      showLegalSlide(legalIndex - 1);
-      startLegalAuto();
-    });
-    legalNext?.addEventListener("click", () => {
-      showLegalSlide(legalIndex + 1);
-      startLegalAuto();
-    });
-    showLegalSlide(0);
-    startLegalAuto();
-  }
+  bindGalleryInteractions();
+  galleryLightboxClose?.addEventListener("click", closeLightbox);
+  galleryLightboxPrev?.addEventListener("click", () => stepLightbox(-1));
+  galleryLightboxNext?.addEventListener("click", () => stepLightbox(1));
+  galleryLightbox?.addEventListener("click", (e) => {
+    if (e.target === galleryLightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!galleryLightbox || galleryLightbox.hidden) return;
+    if (e.key === "Escape") closeLightbox();
+    if (e.key === "ArrowLeft") stepLightbox(-1);
+    if (e.key === "ArrowRight") stepLightbox(1);
+  });
 
   /* Contact form → email + WhatsApp + admin inbox */
   const CONTACT_EMAIL = cmsContent.email || "tahiriibrahim97@gmail.com";
@@ -538,14 +534,30 @@
     }
     if (formOk) formOk.hidden = true;
 
-    try {
-      /* Save to admin dashboard database (when Node + MySQL are running) */
+    const fetchWithTimeout = async (url, options, ms = 4000) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), ms);
       try {
-        const saveRes = await fetch("/api/public/contact", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ name, email, phone, message }),
-        });
+        return await fetch(url, { ...options, signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    try {
+      /* 1) Ruaj në dashboard + njoftim (shpejt) */
+      let savedAdmin = false;
+      try {
+        const saveRes = await fetchWithTimeout(
+          "/api/public/contact",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ name, email, phone, message }),
+          },
+          5000
+        );
+        savedAdmin = saveRes.ok;
         if (!saveRes.ok) {
           console.warn("Mesazhi nuk u ruajt në admin (API).", saveRes.status);
         }
@@ -553,33 +565,51 @@
         /* static-only / Netlify: localStorage already saved */
       }
 
-      const res = await fetch(`https://formsubmit.co/ajax/${CONTACT_EMAIL}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          phone,
-          message,
-          _subject: `Kontakt nga website — ${name}`,
-          _template: "table",
-          _replyto: email,
-        }),
-      });
-
-      if (!res.ok) throw new Error("send failed");
+      /* 2) Email opsional — mos e blloko formën nëse formsubmit vonon */
+      let emailed = false;
+      try {
+        const res = await fetchWithTimeout(
+          `https://formsubmit.co/ajax/${CONTACT_EMAIL}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              name,
+              email,
+              phone,
+              message,
+              _subject: `Kontakt nga website — ${name}`,
+              _template: "table",
+              _replyto: email,
+            }),
+          },
+          3500
+        );
+        emailed = res.ok;
+      } catch {
+        /* email i jashtëm dështoi / timeout — dashboard + WA mjafton */
+      }
 
       openWhatsApp(name, email, phone, message);
       form.reset();
       if (formOk) {
         formOk.hidden = false;
-        formOk.textContent = "Faleminderit! Mesazhi u dërgua me email dhe WhatsApp.";
+        formOk.textContent = savedAdmin
+          ? "Faleminderit! Mesazhi u dërgua (dashboard + WhatsApp)."
+          : emailed
+            ? "Faleminderit! Mesazhi u dërgua me email dhe WhatsApp."
+            : "Faleminderit! Hap WhatsApp për ta dërguar mesazhin.";
+      }
+
+      if (!savedAdmin && !emailed) {
+        window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+          `Kontakt nga website — ${name}`
+        )}&body=${encodeURIComponent(body)}`;
       }
     } catch {
-      /* Fallback: mailto + WhatsApp */
       window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
         `Kontakt nga website — ${name}`
       )}&body=${encodeURIComponent(body)}`;

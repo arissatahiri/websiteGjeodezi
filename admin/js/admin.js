@@ -3,8 +3,9 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
   const titles = {
-    dashboard: "Përmbledhje",
+    dashboard: "Dashboard",
     planner: "Plani ditor",
+    week: "Plani javor",
     calendar: "Kalendari",
     messages: "Mesazhet",
     clients: "Klientët",
@@ -51,6 +52,131 @@
   let view = "dashboard";
   let plannerDate = todayISO();
   let calMonth = new Date();
+  let weekStart = mondayOf(todayISO());
+  let lastNotifyId = Number(localStorage.getItem("gjeodeti-last-notify") || 0);
+  let notifyTimer = null;
+  let deferredInstallPrompt = null;
+
+  function isStandaloneApp() {
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  async function ensureAdminServiceWorker() {
+    if (!("serviceWorker" in navigator)) return null;
+    const reg = await navigator.serviceWorker.register("/admin/sw.js", { scope: "/admin/" });
+    await navigator.serviceWorker.ready;
+    return reg;
+  }
+
+  async function installAdminApp() {
+    if (isStandaloneApp()) {
+      return { ok: true, message: "Aplikacioni është tashmë i instaluar." };
+    }
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      if (choice.outcome === "accepted") {
+        return { ok: true, message: "U instalua në telefon." };
+      }
+      return { ok: false, message: "Instalimi u anulua." };
+    }
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (isIOS) {
+      return {
+        ok: false,
+        message: "Në iPhone: Share → “Add to Home Screen” / “Shto në Ekranin Bazë”.",
+      };
+    }
+    return {
+      ok: false,
+      message: "Hape adminin në Chrome/Edge (HTTPS ose localhost), pastaj provo përsëri.",
+    };
+  }
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const btn = $("#installAppBtn");
+    if (btn) btn.hidden = false;
+  });
+
+  function mondayOf(iso) {
+    const d = new Date(`${iso}T12:00:00`);
+    const day = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - day);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+  }
+
+  async function enablePhoneNotifications() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      throw new Error("Ky telefon/shfletues nuk mbështet njoftime.");
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("Leja për njoftime u refuzua.");
+    const reg = await ensureAdminServiceWorker();
+    if (!reg) throw new Error("Service worker nuk u regjistrua.");
+    const { publicKey } = await api("/api/push/vapid-public");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+    await api("/api/push/subscribe", {
+      method: "POST",
+      body: { subscription: sub.toJSON() },
+    });
+    localStorage.setItem("gjeodeti-push-on", "1");
+    return true;
+  }
+
+  async function pollNotifications() {
+    try {
+      await api("/api/tasks/check-reminders", { method: "POST" });
+      const rows = await api(`/api/notifications?since=${lastNotifyId}`);
+      if (!Array.isArray(rows) || !rows.length) return;
+      const newest = rows[0];
+      if (newest.id > lastNotifyId) {
+        lastNotifyId = newest.id;
+        localStorage.setItem("gjeodeti-last-notify", String(lastNotifyId));
+      }
+      for (const n of [...rows].reverse()) {
+        if (Notification.permission === "granted") {
+          try {
+            new Notification(n.title || "Njoftim", {
+              body: n.body || "",
+              tag: `n-${n.id}`,
+              icon: "/assets/logo.png",
+            });
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      refreshBadge();
+    } catch {
+      /* ignore while offline */
+    }
+  }
+
+  function startNotifyLoop() {
+    if (notifyTimer) clearInterval(notifyTimer);
+    pollNotifications();
+    notifyTimer = setInterval(pollNotifications, 25000);
+  }
 
   function todayISO() {
     const f = new Intl.DateTimeFormat("en-CA", {
@@ -71,6 +197,23 @@
   }
 
   const LOCAL_ADMIN = "http://127.0.0.1:3000/admin/";
+
+  function isLocalHost() {
+    const h = location.hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+  }
+
+  function isWrongLocalAdmin() {
+    if (location.protocol === "file:") return true;
+    if (!isLocalHost()) return false;
+    const port = location.port || (location.protocol === "https:" ? "443" : "80");
+    return port !== "3000";
+  }
+
+  /* Live Server / file:// s’kanë API — dërgo te serveri lokal */
+  if (isWrongLocalAdmin()) {
+    location.replace(LOCAL_ADMIN + location.hash);
+  }
 
   function isHostedStatic() {
     const h = location.hostname;
@@ -106,7 +249,9 @@
       });
     } catch {
       throw new Error(
-        `Serveri nuk është aktiv. Hap HAP-SERVER.bat pastaj ${LOCAL_ADMIN}`
+        isHostedStatic()
+          ? "API nuk lidhet në Netlify. Prit deploy-in ose rifresko pas 30s."
+          : `Serveri nuk është aktiv. Hap HAP-SERVER.bat pastaj ${LOCAL_ADMIN}`
       );
     }
     const raw = await res.text();
@@ -200,19 +345,92 @@
   function showLogin(on) {
     $("#loginView").hidden = !on;
     $("#appView").hidden = on;
+    document.body.classList.toggle("is-app", !on);
     if (on) {
       $("#apiDownCard").hidden = true;
       $("#loginForm").hidden = false;
     }
   }
 
+  function playDashIntro() {
+    return new Promise((resolve) => {
+      const root = $("#dashIntro");
+      if (!root) {
+        resolve();
+        return;
+      }
+      const slides = $$("[data-intro-slide]", root);
+      const skipBtn = $("#dashIntroSkip");
+      let step = 0;
+      let done = false;
+      let t1 = 0;
+      let t2 = 0;
+      const show = (i) => {
+        step = i;
+        slides.forEach((s, idx) => s.classList.toggle("is-active", idx === i));
+      };
+      const onClick = (e) => {
+        if (e.target.closest("#dashIntroSkip")) return;
+        if (step < slides.length - 1) show(step + 1);
+        else finish();
+      };
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(t1);
+        clearTimeout(t2);
+        root.removeEventListener("click", onClick);
+        skipBtn?.removeEventListener("click", finish);
+        root.classList.add("is-leaving");
+        setTimeout(() => {
+          root.hidden = true;
+          root.classList.remove("is-leaving");
+          slides.forEach((s, i) => s.classList.toggle("is-active", i === 0));
+          resolve();
+        }, 520);
+      };
+      const nameEl = $("#introWelcomeName");
+      if (nameEl) {
+        nameEl.textContent = String(admin?.name || "Ibrahim").split(/\s+/)[0] || "Ibrahim";
+      }
+      root.hidden = false;
+      root.classList.remove("is-leaving");
+      show(0);
+      /* restart welcome animations */
+      const welcome = root.querySelector(".dash-intro__welcome");
+      if (welcome) {
+        welcome.classList.remove("is-playing");
+        void welcome.offsetWidth;
+        welcome.classList.add("is-playing");
+      }
+      skipBtn?.addEventListener("click", finish);
+      root.addEventListener("click", onClick);
+      t1 = setTimeout(() => {
+        if (!done) finish();
+      }, 3400);
+    });
+  }
+
   async function enterApp(user) {
     admin = user;
-    $("#adminName").textContent = admin.name || "Admin";
+    const fullName = admin.name || "Admin";
+    $("#adminName").textContent = fullName;
+    const av = $("#adminAvatar");
+    if (av) av.textContent = String(fullName).trim().charAt(0).toUpperCase() || "A";
     showLogin(false);
+    startNotifyLoop();
+    const hashView = (location.hash || "").replace(/^#/, "");
+    const initial =
+      hashView && titles[hashView] ? hashView : "dashboard";
     try {
-      await setView("dashboard");
+      if (initial === "dashboard") {
+        await playDashIntro();
+      }
+      await setView(initial);
       refreshBadge();
+      if (localStorage.getItem("gjeodeti-push-on") === "1") {
+        enablePhoneNotifications().catch(() => {});
+      }
     } catch (dashErr) {
       const main = $("#main");
       if (main) {
@@ -240,7 +458,15 @@
   }
 
   async function setView(name) {
+    if (titles[name]) {
+      try {
+        history.replaceState(null, "", `#${name}`);
+      } catch {
+        /* ignore */
+      }
+    }
     view = name;
+    document.body.classList.toggle("view-dashboard", name === "dashboard");
     $$(".nav-item").forEach((b) => b.classList.toggle("is-active", b.dataset.view === name));
     $("#pageTitle").textContent = titles[name] || name;
     $("#sidebar").classList.remove("is-open");
@@ -253,6 +479,7 @@
     try {
       if (view === "dashboard") await renderDashboard(main);
       else if (view === "planner") await renderPlanner(main);
+      else if (view === "week") await renderWeek(main);
       else if (view === "calendar") await renderCalendar(main);
       else if (view === "messages") await renderMessages(main);
       else if (view === "clients") await renderClients(main);
@@ -272,8 +499,10 @@
       const data = await api("/api/dashboard");
       const n = data.stats.messagesUnread;
       const q = data.stats.quotesNew;
+      const cn = data.stats.clientsNew || 0;
       const b = $("#badgeMsg");
       const bq = $("#badgeQuote");
+      const bc = $("#badgeClients");
       if (n > 0) {
         b.hidden = false;
         b.textContent = String(n);
@@ -284,6 +513,12 @@
           bq.textContent = String(q);
         } else bq.hidden = true;
       }
+      if (bc) {
+        if (cn > 0) {
+          bc.hidden = false;
+          bc.textContent = String(cn);
+        } else bc.hidden = true;
+      }
       const notes = data.notifications || [];
       const wrap = $("#notifyWrap");
       const badgeN = $("#badgeNotify");
@@ -291,10 +526,34 @@
       if (wrap && badgeN && panel) {
         if (notes.length) {
           wrap.hidden = false;
+          badgeN.hidden = false;
           badgeN.textContent = String(notes.length);
           panel.innerHTML = notes
-            .map((x) => `<div class="notify__item">${esc(x.text)}</div>`)
+            .map((x) => {
+              const link = x.link
+                ? ` data-link="${esc(x.link)}"`
+                : x.type === "message"
+                  ? ` data-view="messages"`
+                  : x.type === "client"
+                    ? ` data-view="clients"`
+                  : x.type === "quote"
+                    ? ` data-view="quotes"`
+                    : x.type === "task" || x.type === "urgent" || x.type === "overdue"
+                      ? ` data-view="week"`
+                      : "";
+              return `<button type="button" class="notify__item"${link}>${esc(x.text)}</button>`;
+            })
             .join("");
+          panel.querySelectorAll(".notify__item").forEach((el) => {
+            el.onclick = () => {
+              panel.hidden = true;
+              if (el.dataset.link) {
+                const hash = String(el.dataset.link).split("#")[1];
+                if (hash && titles[hash]) setView(hash);
+                else if (hash === "messages") setView("messages");
+              } else if (el.dataset.view) setView(el.dataset.view);
+            };
+          });
         } else {
           wrap.hidden = true;
           panel.hidden = true;
@@ -309,79 +568,175 @@
     }
   }
 
+  function formatSqDateLabel(isoDate) {
+    const [y, m, d] = String(isoDate || "").split("-").map(Number);
+    if (!y || !m || !d) return isoDate || "";
+    return `Sot, ${d} ${MONTHS_SQ[m - 1]} ${y}`;
+  }
+
+  function weekActivitySvg(week) {
+    const dayNames = ["Hën", "Mar", "Mër", "Enj", "Pre", "Sht", "Die"];
+    const days = week.days?.length ? week.days : Array.from({ length: 7 }, (_, i) => String(i));
+    const counts = days.map(
+      (day) => (week.tasks || []).filter((t) => t.task_date === day).length
+    );
+    const max = Math.max(1, ...counts, 1);
+    const w = 560;
+    const h = 180;
+    const padX = 28;
+    const padY = 24;
+    const pts = counts.map((c, i) => {
+      const x = padX + (i * (w - padX * 2)) / Math.max(1, counts.length - 1);
+      const y = h - padY - (c / max) * (h - padY * 2);
+      return { x, y, c, label: dayNames[i] || "" };
+    });
+    if (!pts.length) return `<p class="empty">Nuk ka të dhëna.</p>`;
+    const line = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    const area = `${line} L${pts[pts.length - 1].x},${h - padY} L${padX},${h - padY} Z`;
+    return `<svg class="dash-linechart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Veprimtaria javore">
+      <defs>
+        <linearGradient id="dashArea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2f6fed" stop-opacity="0.28"/>
+          <stop offset="100%" stop-color="#2f6fed" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <path d="${area}" fill="url(#dashArea)"/>
+      <path d="${line}" fill="none" stroke="#2f6fed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pts
+        .map(
+          (p) =>
+            `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#fff" stroke="#2f6fed" stroke-width="2.5"/>
+             <text x="${p.x}" y="${h - 6}" text-anchor="middle" class="dash-linechart__label">${p.label}</text>`
+        )
+        .join("")}
+    </svg>`;
+  }
+
   /* -------- Dashboard -------- */
   async function renderDashboard(main) {
     const d = await api("/api/dashboard");
-    $("#pageSub").textContent = `${d.now.weekday} · ${d.now.date} · ${d.now.timezone}`;
+    $("#pageTitle").textContent = "Dashboard";
+    $("#pageSub").textContent = "";
+    document.body.classList.add("view-dashboard");
     const s = d.stats;
-    const maxBar = Math.max(
-      1,
-      ...(d.monthly.length ? d.monthly.map((m) => m.messages + m.quotes + m.tasks) : [1])
-    );
+    const firstName = String(admin?.name || "Admin").split(/\s+/)[0];
+    const week = await api(`/api/tasks/week?start=${encodeURIComponent(mondayOf(todayISO()))}`);
+    const dayNames = ["Hën", "Mar", "Mër", "Enj", "Pre", "Sht", "Die"];
+    const byDay = {};
+    (week.days || []).forEach((day) => {
+      byDay[day] = [];
+    });
+    (week.tasks || []).forEach((t) => {
+      if (!byDay[t.task_date]) byDay[t.task_date] = [];
+      byDay[t.task_date].push(t);
+    });
+    const msgs = d.recentMessages || [];
     main.innerHTML = `
-      <div class="stats">
-        <article class="stat"><p class="stat__label">Klientë</p><p class="stat__value">${s.clientsTotal || 0}</p></article>
-        <article class="stat"><p class="stat__label">Projekte aktive</p><p class="stat__value">${s.projectsActive}</p></article>
-        <article class="stat stat--ok"><p class="stat__label">Projekte të përfunduara</p><p class="stat__value">${s.projectsDone}</p></article>
-        <article class="stat ${s.messagesUnread ? "stat--warn" : ""}"><p class="stat__label">Mesazhe të palexuara</p><p class="stat__value">${s.messagesUnread}</p></article>
-        <article class="stat"><p class="stat__label">Oferta të reja</p><p class="stat__value">${s.quotesNew}</p></article>
-        <article class="stat"><p class="stat__label">Detyra sot</p><p class="stat__value">${s.tasksToday}</p></article>
-        <article class="stat stat--ok"><p class="stat__label">Përfunduara sot</p><p class="stat__value">${s.tasksDoneToday}</p></article>
-        <article class="stat"><p class="stat__label">Të mbetura sot</p><p class="stat__value">${s.tasksRemainingToday || 0}</p></article>
-        <article class="stat stat--danger"><p class="stat__label">Urgjente</p><p class="stat__value">${s.tasksUrgent}</p></article>
-        <article class="stat stat--warn"><p class="stat__label">Të vonuara</p><p class="stat__value">${s.tasksOverdue}</p></article>
+      <section class="dash-banner">
+        <div class="dash-banner__text">
+          <h3>Mirë se vini, ${esc(firstName)}!</h3>
+          <p>Këtu mund të menaxhosh gjithë përmbajtjen e faqes suaj.</p>
+        </div>
+        <div class="dash-banner__date">${esc(formatSqDateLabel(d.now?.date || todayISO()))}</div>
+      </section>
+
+      <div class="dash-kpis">
+        <button type="button" class="dash-kpi" data-go="messages">
+          <span class="dash-kpi__icon dash-kpi__icon--blue">✉</span>
+          <span class="dash-kpi__body"><strong>${s.messagesUnread || 0}</strong><em>Mesazhe të reja</em></span>
+          <span class="dash-kpi__arrow">›</span>
+        </button>
+        <button type="button" class="dash-kpi" data-go="projects">
+          <span class="dash-kpi__icon dash-kpi__icon--green">📁</span>
+          <span class="dash-kpi__body"><strong>${s.projectsTotal || s.projectsActive || 0}</strong><em>Projekte gjithsej</em></span>
+          <span class="dash-kpi__arrow">›</span>
+        </button>
+        <button type="button" class="dash-kpi" data-go="gallery">
+          <span class="dash-kpi__icon dash-kpi__icon--purple">🖼</span>
+          <span class="dash-kpi__body"><strong>${s.galleryCount || 0}</strong><em>Foto në galeri</em></span>
+          <span class="dash-kpi__arrow">›</span>
+        </button>
+        <button type="button" class="dash-kpi" data-go="clients">
+          <span class="dash-kpi__icon dash-kpi__icon--teal">👤</span>
+          <span class="dash-kpi__body"><strong>${s.clientsTotal || 0}</strong><em>Klientë</em></span>
+          <span class="dash-kpi__arrow">›</span>
+        </button>
       </div>
-      ${
-        (d.notifications || []).length
-          ? `<section class="panel"><h3>Njoftime</h3><div class="task-list">${d.notifications
-              .map((n) => `<article class="task-card">${esc(n.text)}</article>`)
-              .join("")}</div></section>`
-          : ""
-      }
-      <div class="grid-2">
-        <section class="panel">
-          <div class="panel__head"><h3>Sot</h3><button class="btn btn--ghost" data-go="planner">Shiko</button></div>
-          ${taskListHtml(d.todayTasks)}
+
+      <div class="dash-split">
+        <section class="dash-card">
+          <div class="panel__head">
+            <h3>Veprimtaria e fundit</h3>
+            <span class="dash-chip">7 ditët e fundit</span>
+          </div>
+          ${weekActivitySvg(week)}
         </section>
-        <section class="panel">
-          <div class="panel__head"><h3>Mesazhet e fundit</h3><button class="btn btn--ghost" data-go="messages">Shiko</button></div>
-          ${listSimple(d.recentMessages, (m) => `<strong>${esc(m.name)}</strong><div class="task-card__meta">${esc(m.email || "")} · ${esc(m.created_at)}</div><div>${esc(m.message).slice(0, 120)}</div>`)}
+        <section class="dash-card">
+          <div class="panel__head">
+            <h3>Mesazhet e fundit</h3>
+            <button type="button" class="btn-link" data-go="messages">Shiko të gjitha</button>
+          </div>
+          <div class="dash-msgs">
+            ${
+              msgs.length
+                ? msgs
+                    .slice(0, 4)
+                    .map((m) => {
+                      const unread = !Number(m.is_read);
+                      return `<article class="dash-msg">
+                        <span class="dash-msg__avatar">${esc(String(m.name || "?").charAt(0).toUpperCase())}</span>
+                        <div>
+                          <strong>${esc(m.name)}</strong>
+                          <p>${esc(String(m.message || "").slice(0, 90))}</p>
+                        </div>
+                        <span class="dash-msg__tag ${unread ? "is-new" : ""}">${unread ? "E re" : "Lexuar"}</span>
+                      </article>`;
+                    })
+                    .join("")
+                : `<p class="empty">Nuk ka mesazhe.</p>`
+            }
+          </div>
         </section>
       </div>
-      <div class="grid-2">
-        <section class="panel">
-          <h3>Kërkesat e fundit për oferta</h3>
-          ${listSimple(d.recentQuotes, (q) => `<strong>${esc(q.client_name)}</strong><div class="task-card__meta">${esc(q.service_type || "—")} · ${esc(QSTATUS[q.status] || q.status)}</div>`)}
-        </section>
-        <section class="panel">
-          <h3>Projekte në proces</h3>
-          ${listSimple(d.activeProjects || [], (p) => `<strong>${esc(p.title)}</strong><div class="task-card__meta">${esc(PSTATUS[p.status] || p.status)} · ${esc(p.location || "")}</div>`)}
-        </section>
-      </div>
-      <div class="grid-2">
-        <section class="panel">
-          <h3>Afate që po afrohen</h3>
-          ${listSimple(d.dueSoonProjects || [], (p) => `<strong>${esc(p.title)}</strong><div class="task-card__meta">Afati: ${esc(p.due_date || "—")}</div>`)}
-        </section>
-        <section class="panel">
-          <div class="panel__head"><h3>Detyrat e ardhshme</h3><button class="btn btn--ghost" data-go="calendar">Kalendari</button></div>
-          ${taskListHtml(d.upcomingTasks)}
-        </section>
-      </div>
-      <section class="panel">
-        <h3>Statistika mujore</h3>
-        ${
-          d.monthly.length
-            ? `<div class="chart">${d.monthly
-                .map((m) => {
-                  const total = m.messages + m.quotes + m.tasks;
-                  const h = Math.max(8, Math.round((total / maxBar) * 120));
-                  return `<div class="chart__bar-wrap"><div class="chart__bar" style="height:${h}px" title="Mesazhe ${m.messages}, Oferta ${m.quotes}, Detyra ${m.tasks}"></div><div class="chart__label">${esc(m.month.slice(5))}</div></div>`;
-                })
-                .join("")}</div>`
-            : `<p class="empty">Nuk ka ende të dhëna për grafik.</p>`
-        }
-      </section>`;
+
+      <section class="dash-card">
+        <div class="panel__head">
+          <div>
+            <h3>Plani javor</h3>
+            <p class="cal-intro">${esc(week.start || "")} — ${esc(week.end || "")}</p>
+          </div>
+          <button type="button" class="btn btn--primary" data-go="week">Hap planin</button>
+        </div>
+        <div class="dash-week-mini">
+          ${(week.days || [])
+            .map((day, i) => {
+              const list = byDay[day] || [];
+              return `<article class="dash-week-day ${day === todayISO() ? "is-today" : ""}">
+                <strong>${dayNames[i]}</strong>
+                <span>${esc(String(day).slice(5))}</span>
+                ${
+                  list.length
+                    ? `<ul>${list
+                        .slice(0, 3)
+                        .map(
+                          (t) =>
+                            `<li>${esc(t.start_time ? String(t.start_time).slice(0, 5) + " · " : "")}${esc(t.title)}</li>`
+                        )
+                        .join("")}${list.length > 3 ? `<li>+${list.length - 3}</li>` : ""}</ul>`
+                    : `<p class="empty-mini">Pa detyra</p>`
+                }
+              </article>`;
+            })
+            .join("")}
+        </div>
+      </section>
+
+      <div class="dash-actions">
+        <button type="button" class="dash-action dash-action--blue" data-go="projects"><span>＋</span> Shto Projekt</button>
+        <button type="button" class="dash-action dash-action--green" data-go="gallery"><span>＋</span> Shto Foto</button>
+        <button type="button" class="dash-action dash-action--purple" data-go="messages"><span>✉</span> Shiko Mesazhet</button>
+        <button type="button" class="dash-action dash-action--teal" data-go="settings"><span>⚙</span> Cilësimet</button>
+      </div>`;
     $$("[data-go]", main).forEach((b) => b.addEventListener("click", () => setView(b.dataset.go)));
   }
 
@@ -465,6 +820,97 @@
       cells.push(`<div class="cal-cell is-outside"><div class="cal-cell__n">${d + 1}</div></div>`);
     }
     return cells.join("");
+  }
+
+  /* -------- Weekly plan -------- */
+  async function renderWeek(main) {
+    $("#pageSub").textContent = "Plani i javës për pronarin";
+    const data = await api(`/api/tasks/week?start=${encodeURIComponent(weekStart)}`);
+    weekStart = data.start;
+    const byDay = {};
+    data.days.forEach((d) => {
+      byDay[d] = [];
+    });
+    data.tasks.forEach((t) => {
+      if (!byDay[t.task_date]) byDay[t.task_date] = [];
+      byDay[t.task_date].push(t);
+    });
+    const dayNames = ["Hën", "Mar", "Mër", "Enj", "Pre", "Sht", "Die"];
+    main.innerHTML = `
+      <section class="panel">
+        <div class="panel__head">
+          <div>
+            <h3>Plani javor</h3>
+            <p class="cal-intro">${esc(data.start)} — ${esc(data.end)}. Kur vjen ora e detyrës, merr njoftim në telefon.</p>
+          </div>
+          <div class="calendar-bar">
+            <button class="btn btn--ghost" id="weekPrev">←</button>
+            <button class="btn btn--ghost" id="weekToday">Kjo javë</button>
+            <button class="btn btn--ghost" id="weekNext">→</button>
+            <button class="btn btn--primary" id="addTaskWeek">+ Detyrë</button>
+          </div>
+        </div>
+        <div class="week-grid">
+          ${data.days
+            .map((d, i) => {
+              const list = byDay[d] || [];
+              return `<article class="week-day ${d === todayISO() ? "is-today" : ""}">
+                <header><strong>${dayNames[i]}</strong><span>${esc(d.slice(5))}</span>
+                  <button type="button" class="btn btn--ghost" data-add-day="${esc(d)}">+</button>
+                </header>
+                <div class="week-day__list">
+                  ${
+                    list.length
+                      ? list
+                          .map(
+                            (t) => `<button type="button" class="week-task" data-edit-task="${t.id}">
+                      <span class="week-task__time">${esc(t.start_time || "—")}</span>
+                      <span class="week-task__title">${esc(t.title)}</span>
+                      <span class="week-task__meta">${esc(PRIORITY[t.priority] || t.priority)} · ${esc(TSTATUS[t.status] || t.status)}</span>
+                    </button>`
+                          )
+                          .join("")
+                      : `<p class="week-empty">Pa detyra</p>`
+                  }
+                </div>
+              </article>`;
+            })
+            .join("")}
+        </div>
+      </section>`;
+    $("#weekPrev").onclick = () => {
+      const d = new Date(`${weekStart}T12:00:00`);
+      d.setDate(d.getDate() - 7);
+      weekStart = d.toISOString().slice(0, 10);
+      render();
+    };
+    $("#weekNext").onclick = () => {
+      const d = new Date(`${weekStart}T12:00:00`);
+      d.setDate(d.getDate() + 7);
+      weekStart = d.toISOString().slice(0, 10);
+      render();
+    };
+    $("#weekToday").onclick = () => {
+      weekStart = mondayOf(todayISO());
+      render();
+    };
+    $("#addTaskWeek").onclick = () => {
+      plannerDate = todayISO();
+      openTaskModal();
+    };
+    $$("[data-add-day]").forEach((b) => {
+      b.onclick = () => {
+        plannerDate = b.dataset.addDay;
+        openTaskModal();
+      };
+    });
+    const flat = data.tasks;
+    $$("[data-edit-task]").forEach((b) => {
+      b.onclick = () => {
+        const t = flat.find((x) => String(x.id) === b.dataset.editTask);
+        if (t) openTaskModal(t);
+      };
+    });
   }
 
   /* -------- Planner (list focus) -------- */
@@ -790,9 +1236,11 @@
   async function renderClients(main) {
     $("#pageSub").textContent = "Menaxhimi i klientëve";
     const rows = await api("/api/clients");
+    const newCount = rows.filter((c) => Number(c.is_new)).length;
     main.innerHTML = `
       <div class="panel__head" style="margin-bottom:1rem">
         <div class="toolbar" style="margin:0;flex:1"><input id="clientQ" placeholder="Kërko klient" /></div>
+        ${newCount ? `<button class="btn btn--ghost" id="markClientsSeen">Shëno si të lexuar (${newCount})</button>` : ""}
         <button class="btn btn--primary" id="addClient">+ Shto klient</button>
       </div>
       <div class="panel table-wrap"><table>
@@ -801,8 +1249,8 @@
           rows.length
             ? rows
                 .map(
-                  (c) => `<tr>
-              <td><strong>${esc(c.full_name)}</strong></td>
+                  (c) => `<tr class="${Number(c.is_new) ? "is-new-client" : ""}">
+              <td><strong>${esc(c.full_name)}</strong>${Number(c.is_new) ? ` <span class="chip chip--urgent">I ri</span>` : ""}</td>
               <td>${esc(c.phone || "")}</td>
               <td>${esc(c.email || "")}</td>
               <td class="row-actions">
@@ -817,6 +1265,11 @@
         }
       </tbody></table></div>`;
     $("#addClient").onclick = () => openClientModal();
+    $("#markClientsSeen")?.addEventListener("click", async () => {
+      await api("/api/clients/mark-seen", { method: "POST", body: {} });
+      refreshBadge();
+      render();
+    });
     $$("[data-edit-client]").forEach((b) => {
       b.onclick = () => openClientModal(JSON.parse(b.dataset.editClient));
     });
@@ -830,6 +1283,7 @@
     $$("[data-view-client]").forEach((b) => {
       b.onclick = async () => {
         const data = await api(`/api/clients/${b.dataset.viewClient}`);
+        refreshBadge();
         openModal(`
           <h3>${esc(data.client.full_name)}</h3>
           <p class="task-card__meta">${esc(data.client.phone || "")} · ${esc(data.client.email || "")}</p>
@@ -1208,8 +1662,24 @@
 
   /* -------- Settings -------- */
   async function renderSettings(main) {
-    $("#pageSub").textContent = "Siguria e llogarisë";
+    $("#pageSub").textContent = "Siguria dhe njoftimet";
+    const pushOn = localStorage.getItem("gjeodeti-push-on") === "1";
+    const installed = isStandaloneApp();
     main.innerHTML = `
+      <div class="panel" style="max-width:520px;margin-bottom:1rem">
+        <h3>Aplikacioni në telefon</h3>
+        <p class="cal-intro">Instalo panelin si app në ekranin e telefonit — hapet pa browser.</p>
+        <p class="task-card__meta">Statusi: ${installed ? "I instaluar" : "Nuk është instaluar ende"}</p>
+        <button type="button" class="btn btn--primary" id="installAppBtn" ${installed ? "hidden" : ""}>Instalo në telefon</button>
+        <p id="installMsg" class="cal-intro" style="margin-top:0.65rem" ${installed ? "" : "hidden"}>${installed ? "Po hapet si aplikacion (standalone)." : ""}</p>
+      </div>
+      <div class="panel" style="max-width:520px;margin-bottom:1rem">
+        <h3>Njoftime në telefon</h3>
+        <p class="cal-intro">Aktivizo njoftimet në këtë telefon që të marrësh alert kur klienti kontakton ose kur vjen ora e planit javor.</p>
+        <p class="task-card__meta">Statusi: ${pushOn ? "Aktiv" : "Jo aktiv"}</p>
+        <button type="button" class="btn btn--primary" id="enablePushBtn">Aktivizo njoftimet</button>
+        <p id="pushMsg" hidden></p>
+      </div>
       <form class="panel form-grid" id="passForm" style="max-width:480px">
         <h3>Ndrysho fjalëkalimin</h3>
         <label><span>Fjalëkalimi aktual</span><input type="password" name="currentPassword" required /></label>
@@ -1223,6 +1693,36 @@
         <p class="task-card__meta">${esc(admin?.name || "")} · ${esc(admin?.email || "")}</p>
         <p>Fjalëkalimet ruhen të hashuara në databazë (bcrypt). Sesioni mbrohet me cookie httpOnly.</p>
       </div>`;
+    $("#installAppBtn")?.addEventListener("click", async () => {
+      const msg = $("#installMsg");
+      const result = await installAdminApp();
+      if (msg) {
+        msg.hidden = false;
+        msg.style.color = result.ok ? "var(--ok)" : "var(--danger)";
+        msg.textContent = result.message;
+      }
+      if (result.ok && isStandaloneApp()) {
+        const btn = $("#installAppBtn");
+        if (btn) btn.hidden = true;
+      }
+    });
+    if (deferredInstallPrompt) {
+      const btn = $("#installAppBtn");
+      if (btn) btn.hidden = false;
+    }
+    $("#enablePushBtn").onclick = async () => {
+      const msg = $("#pushMsg");
+      try {
+        await enablePhoneNotifications();
+        msg.hidden = false;
+        msg.style.color = "var(--ok)";
+        msg.textContent = "Njoftimet u aktivizuan në këtë telefon.";
+      } catch (err) {
+        msg.hidden = false;
+        msg.style.color = "var(--danger)";
+        msg.textContent = err.message;
+      }
+    };
     $("#passForm").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1274,6 +1774,7 @@
 
   /* -------- Auth / boot -------- */
   async function bootAdmin() {
+    ensureAdminServiceWorker().catch(() => {});
     const health = await checkApi();
     if (!health.ok) {
       showApiDown(health.error);
@@ -1356,9 +1857,18 @@
     showLoginForm();
   });
 
-  $("#notifyBtn")?.addEventListener("click", () => {
+  $("#notifyBtn")?.addEventListener("click", async () => {
     const panel = $("#notifyPanel");
-    if (panel) panel.hidden = !panel.hidden;
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      try {
+        await api("/api/notifications/read", { method: "POST", body: {} });
+        refreshBadge();
+      } catch {
+        /* ignore */
+      }
+    }
   });
   document.addEventListener("click", (e) => {
     const wrap = $("#notifyWrap");

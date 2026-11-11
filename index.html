@@ -3,26 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="Gjeodeti I.T — Gjeodezi & Kadastër. Matje të sakta, legalizim dhe shërbime profesionale." />
+  <meta name="description" content="Gjeodeti I.T — Gjeodezi & Kadastër. Matje të sakta dhe shërbime profesionale." />
   <title>Gjeodeti I.T — Gjeodezi & Kadastër</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=about-scallop35" />
-  <link rel="stylesheet" href="css/intro.css?v=1" />
+  <link rel="stylesheet" href="css/styles.css?v=svc-anim1" />
+  <link rel="stylesheet" href="css/intro.css?v=intro11" />
   <link rel="icon" href="assets/logo.png" type="image/png" />
   <link rel="preload" as="image" href="assets/hero-desktop.jpg?v=hero18" media="(min-width: 769px)" />
   <link rel="preload" as="image" href="assets/hero-mobile.jpg?v=hero18" media="(max-width: 768px)" />
   <script>
     (function () {
       try {
-        var skip =
-          sessionStorage.getItem("gjeodeti-intro-seen") === "1" ||
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (skip) document.documentElement.classList.add("intro-skip");
-        else document.documentElement.classList.add("intro-pending");
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          document.documentElement.classList.add("intro-skip");
+        } else {
+          document.documentElement.classList.add("intro-pending");
+        }
       } catch (e) {
-        document.documentElement.classList.add("intro-skip");
+        document.documentElement.classList.add("intro-pending");
       }
     })();
   </script>
@@ -36,13 +36,20 @@
   <div id="siteIntro" class="site-intro" role="dialog" aria-label="Hyrja e faqes" aria-modal="true">
     <canvas id="introCanvas" class="site-intro__canvas" aria-hidden="true"></canvas>
     <div class="site-intro__vignette" aria-hidden="true"></div>
+    <div class="site-intro__brand" id="introLogoWrap" aria-hidden="true">
+      <img src="assets/logo-header-white.png?v=2" alt="" class="site-intro__logo" id="introLogo" width="280" height="68" />
+      <span class="site-intro__logo-ring" aria-hidden="true"></span>
+    </div>
     <div class="site-intro__texts" aria-live="polite">
+      <div class="site-intro__line site-intro__line--owner-block" data-intro-line>
+        <p class="site-intro__owner-name">Ibrahim Tahiri</p>
+        <p class="site-intro__owner-role">Gjeodet · Themelues i Gjeodeti I.T</p>
+      </div>
       <p class="site-intro__line site-intro__line--brand" data-intro-line>GJEODETI <span>I.T.</span></p>
       <p class="site-intro__line site-intro__line--sub" data-intro-line>Gjeodezi dhe Kadastër</p>
       <p class="site-intro__line site-intro__line--tag" data-intro-line>Matje të sakta. Zgjidhje profesionale.</p>
       <p class="site-intro__line site-intro__line--final" data-intro-line>Saktësi në çdo detaj.</p>
     </div>
-    <pre class="site-intro__coords" id="introCoords" aria-hidden="true"></pre>
     <button type="button" class="site-intro__skip" id="introSkip">Kalo hyrjen</button>
   </div>
 
@@ -88,7 +95,6 @@
         <a href="#rreth" class="nav__link" data-i18n="nav.about">Rreth Nesh</a>
         <a href="#pronari" class="nav__link" data-i18n="nav.owner">Pronari</a>
         <a href="#sherbimet" class="nav__link" data-i18n="nav.services">Shërbimet</a>
-        <a href="#legalizimi" class="nav__link" data-i18n="nav.legal">Legalizimi</a>
         <a href="#gjeoportali" class="nav__link" data-i18n="nav.geoportal">Gjeoportali</a>
         <a href="#galeria" class="nav__link" data-i18n="nav.gallery">Galeria</a>
         <a href="#kontakti" class="nav__link" data-i18n="nav.contact">Kontakti</a>
@@ -205,29 +211,52 @@
         <header class="services__intro reveal">
           <p class="services__eyebrow" data-i18n="services.eyebrow">Shërbimet</p>
           <h2 class="services__heading"><span data-i18n="services.titleLine1">Çfarë</span> <span class="services__mark" data-i18n="services.titleLine2">ofrojmë</span></h2>
-          <p class="services__lead" data-i18n="services.lead">Nga matjet e parcelës te legalizimi dhe dokumentacioni teknik.</p>
+          <p class="services__lead" data-i18n="services.lead">Ofrojmë një gamë të gjerë shërbimesh gjeodezike, të përshtatura për nevojat tuaja.</p>
         </header>
 
-        <div class="services__cards">
-          <a class="svc-card reveal" href="#kontakti">
-            <img src="assets/gallery/teren-01.jpg" alt="" loading="lazy" />
-            <span data-i18n="feat.1">Ndarja e parcelës</span>
+        <div class="services__grid" id="servicesGrid">
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 4h8l2 4H6l2-4z"/><path d="M6 8h12v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 12h6M9 15h4"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.1">Ndarja e parcelës</h3>
+            <p class="svc-tile__text" data-i18n="feat.1.desc">Ndarje profesionale e parcelave kadastrale.</p>
           </a>
-          <a class="svc-card reveal" href="#legalizimi">
-            <img src="assets/gallery/teren-05.jpg" alt="" loading="lazy" />
-            <span data-i18n="feat.6">Legalizim</span>
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 7h4v4H7zM13 13h4v4h-4z"/><path d="M11 9h2v6h-2z"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.2">Bashkim i parcelave</h3>
+            <p class="svc-tile__text" data-i18n="feat.2.desc">Bashkim i parcelave sipas procedurave ligjore.</p>
           </a>
-          <a class="svc-card reveal" href="#kontakti">
-            <img src="assets/gallery/teren-08.jpg" alt="" loading="lazy" />
-            <span data-i18n="feat.5">Matje ndërtesash</span>
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19V5l8-2 8 2v14l-8 2-8-2z"/><path d="M12 3v18M4 12h16"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.3">Ri-rregullim i kufirit</h3>
+            <p class="svc-tile__text" data-i18n="feat.3.desc">Rregullim dhe verifikim i kufijve të pronës.</p>
           </a>
-        </div>
-
-        <div class="services__pills">
-          <a class="svc-pill reveal" href="#kontakti" data-i18n="feat.2">Bashkim i parcelave</a>
-          <a class="svc-pill reveal" href="#kontakti" data-i18n="feat.3">Ri-rregullim i kufirit</a>
-          <a class="svc-pill reveal" href="#kontakti" data-i18n="feat.4">Caktim i kufijve</a>
-          <a class="svc-pill reveal" href="#kontakti" data-i18n="feat.7">Projektim & mbikëqyrje</a>
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.4">Caktim i kufijve</h3>
+            <p class="svc-tile__text" data-i18n="feat.4.desc">Përcaktim i saktë i kufijve në terren.</p>
+          </a>
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.5">Matje ndërtesash</h3>
+            <p class="svc-tile__text" data-i18n="feat.5.desc">Matje teknike të ndërtesave dhe objekteve.</p>
+          </a>
+          <a class="svc-tile reveal" href="#kontakti">
+            <span class="svc-tile__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19h16"/><path d="M7 19V9l5-3 5 3v10"/><path d="M9 12h2M13 12h2M9 15h2M13 15h2"/></svg>
+            </span>
+            <h3 class="svc-tile__title" data-i18n="feat.7">Projektim & mbikëqyrje</h3>
+            <p class="svc-tile__text" data-i18n="feat.7.desc">Projektim gjeodezik dhe mbikëqyrje profesionale.</p>
+          </a>
         </div>
 
         <div class="services__actions reveal">
@@ -237,94 +266,7 @@
       </div>
     </section>
 
-    
-<!-- LEGALIZATION — 3 cards (i njëjti stil) -->
-    <section class="legal section" id="legalizimi">
-      <div class="container">
-        <header class="legal__head reveal">
-          <h2 class="section__title" data-i18n="legal.title">Legalizimi i ndërtimeve</h2>
-          <p class="section__lead" data-i18n="legal.lead">Informacion për pronarët e ndërtimeve pa leje — kushtet, rreziqet dhe hapat e procedurës së legalizimit.</p>
-        </header>
-        <div class="legal-slider reveal" id="legalSlider">
-          <div class="legal-slides">
-            <!-- Slide 1 -->
-            <article class="legal-card is-active" data-legal-slide>
-              <div class="legal-card__brand">
-                <img src="assets/logo-legal-clean.png" alt="Gjeodeti I.T — Gjeodezi dhe Kadastër" />
-              </div>
-              <div class="legal-card__body legal-card__body--grid">
-                <p class="legal-card__for" data-i18n="legal.for">Për pronarët e ndërtimeve pa leje</p>
-                <h2 class="legal-card__title" data-i18n="legal.can">Ndërtimi juaj mund të legalizohet.</h2>
-                <p class="legal-card__dont" data-i18n="legal.dont">Mos e humb mundësinë!</p>
-                <hr class="legal-card__rule" />
-                <p class="legal-card__steps" data-i18n="legal.steps">Procedura ka disa hapa. Ne ju udhëzojmë në secilin hap.</p>
-              </div>
-              <a class="legal-card__foot" href="tel:+38349719253">
-                <span data-i18n="legal.more">KONTAKTONI PËR MË SHUMË!</span>
-                <span class="legal-card__phone">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"/></svg>
-                  +383 49 719 253
-                </span>
-              </a>
-            </article>
-
-            <!-- Slide 2 -->
-            <article class="legal-card" data-legal-slide hidden>
-              <div class="legal-card__brand">
-                <img src="assets/logo-legal-clean.png" alt="Gjeodeti I.T — Gjeodezi dhe Kadastër" />
-              </div>
-              <div class="legal-card__body legal-card__body--grid">
-                <h2 class="legal-card__ask" data-i18n="legal.ask">A keni ndërtim pa leje?</h2>
-                <p class="legal-card__qualify" data-i18n="legal.qualify">Ndërtuar para 5 shtatorit 2018? Mund të kualifikohet për legalizim.</p>
-                <ul class="legal-card__list">
-                  <li data-i18n="legal.b1">Pa aplikim, ndërtimi futet në listën e rrënimit!</li>
-                  <li data-i18n="legal.b2">Pa legalizim, nuk regjistrohet në Kadastër!</li>
-                  <li data-i18n="legal.b3">Pa regjistrim në Kadastër, pronari nuk i ka të drejtat e plota mbi ndërtimin!</li>
-                </ul>
-              </div>
-              <a class="legal-card__foot" href="tel:+38349719253">
-                <span data-i18n="legal.more">KONTAKTONI PËR MË SHUMË!</span>
-                <span class="legal-card__phone">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"/></svg>
-                  +383 49 719 253
-                </span>
-              </a>
-            </article>
-
-            <!-- Slide 3 -->
-            <article class="legal-card" data-legal-slide hidden>
-              <div class="legal-card__brand">
-                <img src="assets/logo-legal-clean.png" alt="Gjeodeti I.T — Gjeodezi dhe Kadastër" />
-              </div>
-              <div class="legal-card__body legal-card__body--grid legal-card__body--measure">
-                <p class="legal-card__ghost" aria-hidden="true">Legalizimi fillon me një matje të saktë.</p>
-                <h2 class="legal-card__measure-title">
-                  <span data-i18n="legal.measureA">Legalizimi fillon me</span>
-                  <span class="legal-card__accent" data-i18n="legal.measureB">një matje të saktë.</span>
-                </h2>
-                <p class="legal-card__help" data-i18n="legal.help">Na telefononi. Dokumentacionin e kompletojmë ne, dhe ju tregojmë çfarë nevojitet nga ju.</p>
-              </div>
-              <a class="legal-card__foot" href="tel:+38349719253">
-                <span data-i18n="legal.more">KONTAKTONI PËR MË SHUMË!</span>
-                <span class="legal-card__phone">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"/></svg>
-                  +383 49 719 253
-                </span>
-              </a>
-            </article>
-          </div>
-          <div class="legal-controls">
-            <button type="button" class="legal-controls__btn" id="legalPrev" aria-label="Previous">‹</button>
-            <div class="legal-dots" id="legalDots"></div>
-            <button type="button" class="legal-controls__btn" id="legalNext" aria-label="Next">›</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-
-    
-<!-- GEOPORTAL -->
+    <!-- GEOPORTAL -->
     <section class="geoportal section" id="gjeoportali">
       <div class="container">
         <div class="geoportal__panel reveal">
@@ -354,23 +296,39 @@
     <!-- GALLERY -->
     <section class="gallery section" id="galeria">
       <div class="container">
-        <h2 class="section__title reveal" data-i18n="gallery.title">Galeria</h2>
-        <p class="section__lead reveal" data-i18n="gallery.lead">Pamje nga puna jonë në terren.</p>
-        <div class="gallery__track-wrap">
-          <div class="gallery__track" id="galleryTrack">
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-01.jpg" alt="Matje GNSS në terren" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-02.jpg" alt="Pajisje gjeodezike në fushë" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-03.jpg" alt="Kontroller dhe staf në pyll" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-04.jpg" alt="GNSS në parcelë" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-05.jpg" alt="Matje në perëndim dielli" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-06.jpg" alt="Receptor GNSS në kodër" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-07.jpg" alt="Peizazh dhe turbinat e erës" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-08.jpg" alt="Dy stacione GNSS në terren" loading="lazy" /></figure>
-            <figure class="gallery__item reveal"><img src="assets/gallery/teren-09.jpg" alt="Punë gjeodezike në kodra" loading="lazy" /></figure>
-          </div>
+        <header class="gallery__intro reveal">
+          <p class="gallery__eyebrow" data-i18n="gallery.eyebrow">Galeria</p>
+          <h2 class="gallery__heading"><span data-i18n="gallery.titleLine1">Pamje</span> <span class="gallery__mark" data-i18n="gallery.titleLine2">nga terreni</span></h2>
+          <p class="gallery__lead" data-i18n="gallery.lead">Pamje nga puna jonë në terren.</p>
+        </header>
+      </div>
+      <div class="gallery__marquee reveal" aria-label="Galeria">
+        <div class="gallery__track" id="galleryTrack">
+          <button type="button" class="gallery__item" data-gallery-index="0"><img src="assets/gallery/teren-11.jpg" alt="Matje në qytet me staf GNSS" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="1"><img src="assets/gallery/teren-01.jpg" alt="Matje GNSS në terren" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="2"><img src="assets/gallery/teren-07.jpg?v=orient1" alt="Peizazh dhe turbinat e erës" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="3"><img src="assets/gallery/teren-10.jpg" alt="Matje GNSS në perëndim dielli" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="4"><img src="assets/gallery/teren-08.jpg" alt="Dy stacione GNSS në terren" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="5"><img src="assets/gallery/teren-03.jpg" alt="Kontroller dhe staf në pyll" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="6"><img src="assets/gallery/teren-12.jpg" alt="Matje në perëndim me peizazh mali" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="7"><img src="assets/gallery/teren-04.jpg" alt="GNSS në parcelë" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="8"><img src="assets/gallery/teren-06.jpg" alt="Receptor GNSS në kodër" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="9"><img src="assets/gallery/teren-02.jpg" alt="Pajisje gjeodezike në fushë" loading="lazy" /></button>
+          <button type="button" class="gallery__item" data-gallery-index="10"><img src="assets/gallery/teren-05.jpg" alt="Matje në perëndim dielli" loading="lazy" /></button>
         </div>
       </div>
     </section>
+
+    <div class="gallery-lightbox" id="galleryLightbox" hidden>
+      <button type="button" class="gallery-lightbox__close" id="galleryLightboxClose" aria-label="Mbyll">×</button>
+      <button type="button" class="gallery-lightbox__nav gallery-lightbox__nav--prev" id="galleryLightboxPrev" aria-label="Fotoja e mëparshme">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <img class="gallery-lightbox__img" id="galleryLightboxImg" src="" alt="" />
+      <button type="button" class="gallery-lightbox__nav gallery-lightbox__nav--next" id="galleryLightboxNext" aria-label="Fotoja e radhës">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
 
     
 <!-- CTA -->
@@ -395,6 +353,7 @@
 
     <!-- CONTACT -->
     <section class="contact section" id="kontakti">
+      <div class="contact__glow" aria-hidden="true"></div>
       <div class="container contact__grid">
         <div>
           <h2 class="section__title reveal" data-i18n="contact.title">Kontakti</h2>
@@ -402,6 +361,7 @@
           <ul class="contact__info reveal">
             <li><strong>WhatsApp</strong><a href="https://wa.me/38349719253">+383 49 719 253</a></li>
             <li><strong>Email</strong><a href="mailto:tahiriibrahim97@gmail.com">tahiriibrahim97@gmail.com</a></li>
+            <li><strong data-i18n="contact.location">Lokacioni</strong><span data-i18n="contact.locationVal">Ferizaj</span></li>
             <li><strong data-i18n="contact.hours">Orari</strong><span data-i18n="contact.hoursVal">Hën – Prem · 08:00 – 17:00</span></li>
           </ul>
           <div class="map reveal">
@@ -448,7 +408,7 @@
           </a>
           <p class="footer__about">
             Gjeodeti I.T, me seli në Ferizaj, është kompani e specializuar në gjeodezi dhe kadastër.
-            Përmes gjeodetit Ibrahim Tahiri ofrojmë matje të sakta, legalizim dhe dokumentacion teknik për individë dhe biznese.
+            Përmes gjeodetit Ibrahim Tahiri ofrojmë matje të sakta dhe dokumentacion teknik për individë dhe biznese.
           </p>
           <div class="footer__social" aria-label="Rrjetet sociale">
             <a href="https://wa.me/38349719253" class="footer__soc" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp">
@@ -473,7 +433,6 @@
             <li><a href="#rreth">Rreth Nesh</a></li>
             <li><a href="#pronari">Pronari</a></li>
             <li><a href="#sherbimet">Shërbimet</a></li>
-            <li><a href="#legalizimi">Legalizimi</a></li>
             <li><a href="#galeria">Galeria</a></li>
             <li><a href="#kontakti">Kontakti</a></li>
           </ul>
@@ -487,16 +446,22 @@
             <li>Ri-rregullim i kufirit</li>
             <li>Caktim i kufijve</li>
             <li>Matje ndërtesash</li>
-            <li>Legalizim i ndërtimeve</li>
             <li>Projektim &amp; mbikëqyrje</li>
           </ul>
         </div>
+      </div>
+
+      <div class="container footer__mark-wrap" aria-hidden="true">
+        <p class="footer__mark">Gjeodeti I.T.</p>
       </div>
     </div>
     <div class="footer__bar">
       <div class="container footer__bar-inner">
         <p class="footer__copy">© <span id="year"></span> Gjeodeti I.T. Të gjitha drejtat e rezervuara.</p>
-        <p class="footer__made">Made by <strong>Arisa Tahiri</strong></p>
+        <p class="footer__made">
+          Made by <strong>Arisa Tahiri</strong>
+          <a href="/admin/" class="footer__panel" title="Panel" aria-label="Panel i punës">⚙</a>
+        </p>
       </div>
     </div>
   </footer>
@@ -505,8 +470,8 @@
     <svg viewBox="0 0 24 24" width="28" height="28" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.999-1.312A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.29-1.24l-.307-.184-3.167.83.847-3.087-.2-.318A7.962 7.962 0 014 12a8 8 0 118 8z"/></svg>
   </a>
 
-  <script src="js/intro.js?v=4"></script>
-  <script src="js/i18n.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/intro.js?v=intro11"></script>
+  <script src="js/i18n.js?v=gallery-full1"></script>
+  <script src="js/main.js?v=contact-fast1"></script>
 </body>
 </html>

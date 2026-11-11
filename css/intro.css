@@ -34,6 +34,52 @@
   z-index: 2;
 }
 
+.site-intro__brand {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.site-intro__logo {
+  width: min(72vw, 18rem);
+  height: auto;
+  display: block;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 8px 28px rgba(30, 95, 191, 0.45));
+}
+
+.site-intro__logo-ring {
+  position: absolute;
+  width: min(78vw, 20rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(59, 158, 255, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(59, 158, 255, 0.12),
+    0 0 40px rgba(30, 95, 191, 0.25);
+  animation: introRingPulse 2.4s ease-in-out infinite;
+  opacity: 0;
+}
+
+@keyframes introRingPulse {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.7;
+  }
+}
+
 .site-intro__texts {
   position: absolute;
   inset: 0;
@@ -48,8 +94,7 @@
 .site-intro__line {
   position: absolute;
   left: 50%;
-  top: 52%;
-  transform: translate(-50%, -50%);
+  top: 50%;
   margin: 0;
   width: min(92vw, 40rem);
   opacity: 0;
@@ -58,6 +103,34 @@
   font-family: "Outfit", system-ui, sans-serif;
   letter-spacing: 0.02em;
   text-shadow: 0 4px 28px rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+.site-intro__line--owner-block {
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  filter: none;
+}
+
+.site-intro__owner-name {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.35rem);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  color: #f2f7fc;
+  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.5);
+  filter: none;
+}
+
+.site-intro__owner-role {
+  margin: 0;
+  font-size: clamp(0.9rem, 2.3vw, 1.12rem);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #3b9eff;
 }
 
 .site-intro__line--brand {
@@ -93,21 +166,6 @@
   letter-spacing: 0.04em;
 }
 
-.site-intro__coords {
-  position: absolute;
-  z-index: 3;
-  left: 6%;
-  bottom: 14%;
-  font-family: "Outfit", ui-monospace, monospace;
-  font-size: clamp(0.68rem, 1.6vw, 0.82rem);
-  color: rgba(90, 170, 255, 0.75);
-  letter-spacing: 0.06em;
-  line-height: 1.7;
-  opacity: 0;
-  pointer-events: none;
-  text-shadow: 0 0 12px rgba(59, 158, 255, 0.35);
-}
-
 .site-intro__skip {
   position: absolute;
   z-index: 4;
@@ -140,10 +198,8 @@ body.intro-active {
 }
 
 @media (max-width: 640px) {
-  .site-intro__coords {
-    left: 4%;
-    bottom: 18%;
-    font-size: 0.65rem;
+  .site-intro__logo {
+    width: min(78vw, 15rem);
   }
 
   .site-intro__skip {

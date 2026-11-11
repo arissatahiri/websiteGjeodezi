@@ -1,25 +1,12 @@
 (() => {
-  const SESSION_KEY = "gjeodeti-intro-seen";
-  const DURATION = 7.5;
+  const DURATION = 13.2;
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const seen = (() => {
-    try {
-      return sessionStorage.getItem(SESSION_KEY) === "1";
-    } catch {
-      return false;
-    }
-  })();
 
   const root = document.getElementById("siteIntro");
   if (!root) return;
 
   const finish = () => {
-    try {
-      sessionStorage.setItem(SESSION_KEY, "1");
-    } catch {
-      /* ignore */
-    }
     document.documentElement.classList.remove("intro-pending");
     document.body.classList.remove("intro-active");
     root.classList.add("is-done");
@@ -30,7 +17,7 @@
     }, 900);
   };
 
-  if (seen || reduceMotion || document.documentElement.classList.contains("intro-skip")) {
+  if (reduceMotion || document.documentElement.classList.contains("intro-skip")) {
     document.documentElement.classList.remove("intro-pending");
     root.remove();
     return;
@@ -64,7 +51,8 @@
     const canvas = document.getElementById("introCanvas");
     const skipBtn = document.getElementById("introSkip");
     const lines = [...root.querySelectorAll("[data-intro-line]")];
-    const coordsEl = document.getElementById("introCoords");
+    const logoWrap = document.getElementById("introLogoWrap");
+    const logoRing = logoWrap?.querySelector(".site-intro__logo-ring");
 
     const isMobile = window.matchMedia("(max-width: 768px)").matches || navigator.maxTouchPoints > 1;
     const dprCap = isMobile ? 1.25 : 1.75;
@@ -343,14 +331,77 @@
       camera.lookAt(camProxy.lx, camProxy.ly, camProxy.lz);
     };
 
-    const showLine = (el, dur = 0.55) =>
-      gsap.fromTo(
+    const centerLine = (el) =>
+      gsap.set(el, { left: "50%", top: "50%", xPercent: -50, yPercent: -50 });
+
+    lines.forEach(centerLine);
+
+    const showLine = (el, dur = 0.55) => {
+      centerLine(el);
+      return gsap.fromTo(
         el,
         { opacity: 0, filter: "blur(10px)", y: 18 },
-        { opacity: 1, filter: "blur(0px)", y: 0, duration: dur, ease: "power2.out" }
+        { opacity: 1, filter: "blur(0px)", y: 0, duration: dur, ease: "power2.out", xPercent: -50, yPercent: -50 }
       );
+    };
     const hideLine = (el, dur = 0.35) =>
-      gsap.to(el, { opacity: 0, filter: "blur(8px)", y: -12, duration: dur, ease: "power1.in" });
+      gsap.to(el, {
+        opacity: 0,
+        filter: "blur(8px)",
+        y: -12,
+        duration: dur,
+        ease: "power1.in",
+        xPercent: -50,
+        yPercent: -50,
+      });
+
+    /* Same signature reveal for logo + owner name (no blur) */
+    const showSignature = (el, { nameSel, roleSel, imgSel } = {}) => {
+      const name = nameSel ? el.querySelector(nameSel) : null;
+      const role = roleSel ? el.querySelector(roleSel) : null;
+      const img = imgSel ? el.querySelector(imgSel) : null;
+      const seq = gsap.timeline();
+      gsap.set(el, { filter: "none", clearProps: "filter" });
+      if (!imgSel) centerLine(el);
+      seq.fromTo(
+        el,
+        { opacity: 0, scale: 0.88, ...(imgSel ? {} : { xPercent: -50, yPercent: -50 }) },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 0.9,
+          ease: "power3.out",
+          ...(imgSel ? {} : { xPercent: -50, yPercent: -50 }),
+        },
+        0
+      );
+      if (name) {
+        gsap.set(name, { filter: "none" });
+        seq.fromTo(
+          name,
+          { opacity: 0, letterSpacing: "0.28em" },
+          { opacity: 1, letterSpacing: "0.04em", duration: 0.9, ease: "power2.out" },
+          0.05
+        );
+      }
+      if (img) {
+        seq.fromTo(
+          img,
+          { opacity: 0, scaleX: 1.18, scaleY: 0.92 },
+          { opacity: 1, scaleX: 1, scaleY: 1, duration: 1.0, ease: "power2.out" },
+          0.05
+        );
+      }
+      if (role) {
+        seq.fromTo(
+          role,
+          { opacity: 0, y: 14 },
+          { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" },
+          0.55
+        );
+      }
+      return seq;
+    };
 
     const tl = gsap.timeline({
       defaults: { ease: "power2.inOut" },
@@ -362,80 +413,83 @@
       },
     });
 
-    tl.to([terrain.scale, wire.scale], { y: 1, duration: 1.4, ease: "power3.out" }, 0);
+    /* Logo first — same entrance as owner name */
+    if (logoWrap) {
+      gsap.set(logoWrap, { xPercent: -50, yPercent: -50, left: "50%", top: "46%" });
+      tl.add(showSignature(logoWrap, { imgSel: ".site-intro__logo" }), 0.08);
+      if (logoRing) tl.to(logoRing, { opacity: 1, duration: 0.55 }, 0.55);
+      tl.to(
+        logoWrap,
+        { opacity: 0, scale: 1.06, duration: 0.65, ease: "power2.in" },
+        3.55
+      );
+    }
+
+    tl.to([terrain.scale, wire.scale], { y: 1, duration: 1.7, ease: "power3.out" }, 0.4);
     contourGroup.children.forEach((c, i) => {
-      tl.to(c.scale, { x: 1, y: 1, z: 1, duration: 1.15, ease: "power2.out" }, 0.25 + i * 0.08);
+      tl.to(c.scale, { x: 1, y: 1, z: 1, duration: 1.3, ease: "power2.out" }, 0.6 + i * 0.1);
     });
 
     tl.to(
       camProxy,
-      { x: 4.2, y: 5.8, z: 9.2, duration: 2.4, ease: "sine.inOut", onUpdate: updateCam },
-      0.15
+      { x: 4.2, y: 5.8, z: 9.2, duration: 3.2, ease: "sine.inOut", onUpdate: updateCam },
+      0.5
     );
 
-    tl.to(instrument.scale, { x: 1, y: 1, z: 1, duration: 0.7, ease: "back.out(1.4)" }, 0.85);
+    tl.to(instrument.scale, { x: 1, y: 1, z: 1, duration: 0.85, ease: "back.out(1.4)" }, 1.7);
 
     beams.forEach((beam, i) => {
       const from = new THREE.Vector3(2.4, 1.48, 1.8);
       const to = beam.userData.target;
       const sweep = to.clone();
       placeBeam(beam, from, to);
-      tl.to(beam.material, { opacity: 0.65, duration: 0.2 }, 1.05 + i * 0.1);
+      tl.to(beam.material, { opacity: 0.65, duration: 0.25 }, 2.1 + i * 0.12);
       tl.to(
         sweep,
         {
           x: to.x + Math.sin(i + 1) * 1.4,
           z: to.z + Math.cos(i + 1) * 1.4,
-          duration: 1.5,
+          duration: 1.9,
           ease: "sine.inOut",
           onUpdate: () => placeBeam(beam, from, sweep),
         },
-        1.05 + i * 0.1
+        2.1 + i * 0.12
       );
-      tl.to(beam.material, { opacity: 0, duration: 0.35 }, 2.55 + i * 0.08);
+      tl.to(beam.material, { opacity: 0, duration: 0.4 }, 4.0 + i * 0.1);
     });
 
     pointMeshes.forEach((p, i) => {
-      tl.to(p.mesh.material, { opacity: 1, duration: 0.3 }, 1.4 + i * 0.08);
-      tl.to(p.ring.material, { opacity: 0.7, duration: 0.3 }, 1.4 + i * 0.08);
-      tl.to(p.ring.scale, { x: 1.8, y: 1.8, z: 1.8, duration: 0.6 }, 1.45 + i * 0.08);
+      tl.to(p.mesh.material, { opacity: 1, duration: 0.35 }, 2.5 + i * 0.1);
+      tl.to(p.ring.material, { opacity: 0.7, duration: 0.35 }, 2.5 + i * 0.1);
+      tl.to(p.ring.scale, { x: 1.8, y: 1.8, z: 1.8, duration: 0.7 }, 2.55 + i * 0.1);
     });
 
-    if (coordsEl) {
-      const samples = [
-        "N 42°22′14.2″  E 21°09′08.7″",
-        "H = 578.42 m  ·  RMS ±0.012",
-        "STN-07  ·  GNSS FIX",
-      ];
-      tl.to(coordsEl, { opacity: 1, duration: 0.4 }, 1.5);
-      tl.call(
-        () => {
-          let i = 0;
-          coordsEl.textContent = samples[0];
-          coordsEl._iv = setInterval(() => {
-            i = (i + 1) % samples.length;
-            coordsEl.textContent = samples[i];
-          }, 700);
-        },
-        null,
-        1.5
-      );
-    }
-
-    const [brand, sub, tag, finalLine] = lines;
+    const [ownerBlock, brand, sub, tag, finalLine] = lines;
     if (brand) {
-      tl.add(showLine(brand, 0.7), 1.0);
-      tl.add(hideLine(brand), 2.5);
+      tl.add(showLine(brand, 0.75), 3.9);
+      tl.add(hideLine(brand, 0.4), 5.25);
     }
     if (sub) {
-      tl.add(showLine(sub, 0.6), 2.65);
-      tl.add(hideLine(sub), 3.85);
+      tl.add(showLine(sub, 0.65), 5.55);
+      tl.add(hideLine(sub, 0.35), 6.75);
     }
     if (tag) {
-      tl.add(showLine(tag, 0.6), 4.0);
-      tl.add(hideLine(tag), 5.2);
+      tl.add(showLine(tag, 0.65), 7.05);
+      tl.add(hideLine(tag, 0.35), 8.25);
     }
-    if (finalLine) tl.add(showLine(finalLine, 0.65), 5.4);
+    if (finalLine) {
+      tl.add(showLine(finalLine, 0.7), 8.55);
+      tl.add(hideLine(finalLine, 0.35), 9.7);
+    }
+    if (ownerBlock) {
+      tl.add(
+        showSignature(ownerBlock, {
+          nameSel: ".site-intro__owner-name",
+          roleSel: ".site-intro__owner-role",
+        }),
+        10.05
+      );
+    }
 
     tl.to(
       camProxy,
@@ -444,22 +498,26 @@
         y: 2.4,
         z: 3.2,
         ly: 0.9,
-        duration: 1.15,
+        duration: 1.35,
         ease: "power3.in",
         onUpdate: updateCam,
       },
-      DURATION - 1.25
+      DURATION - 1.45
     );
-    tl.to(wire.material, { opacity: 0.05, duration: 0.8 }, DURATION - 1.1);
-    tl.to(root, { opacity: 0, duration: 0.75, ease: "power2.in" }, DURATION - 0.85);
-    if (coordsEl) tl.to(coordsEl, { opacity: 0, duration: 0.4 }, DURATION - 1.0);
-    if (finalLine) tl.add(hideLine(finalLine, 0.4), DURATION - 0.9);
+    tl.to(wire.material, { opacity: 0.05, duration: 0.9 }, DURATION - 1.25);
+    tl.to(root, { opacity: 0, duration: 0.9, ease: "power2.in" }, DURATION - 0.95);
+    if (ownerBlock) {
+      tl.to(
+        ownerBlock,
+        { opacity: 0, scale: 1.04, duration: 0.5, ease: "power1.in", xPercent: -50, yPercent: -50 },
+        DURATION - 1.05
+      );
+    }
 
     function dispose() {
       if (disposed) return;
       disposed = true;
       window.removeEventListener("resize", onResize);
-      if (coordsEl && coordsEl._iv) clearInterval(coordsEl._iv);
       cancelAnimationFrame(raf);
       tl.kill();
       geo.dispose();

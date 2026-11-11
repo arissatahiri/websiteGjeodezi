@@ -13,7 +13,7 @@ npx --yes serve .
 ## Çfarë përfshin
 
 - Hero me animacione (zoom, pin pulse, dron)
-- Rreth nesh, Shërbimet, Legalizimi, Galeria, CTA, Kontakt
+- Rreth nesh, Shërbimet, Galeria, CTA, Kontakt
 - WhatsApp `+383 49 719 253`, email, Google Maps, formular
 - Panel cilësimesh: Blu Light / Blu Dark / E zezë & Ari + gjuhët
 - Logo: `assets/logo.png`

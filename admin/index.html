@@ -2,15 +2,22 @@
 <html lang="sq">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1f3a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Gjeodeti Admin" />
   <title>Paneli — Gjeodeti I.T</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/admin.css?v=login2" />
-  <link rel="icon" href="../assets/logo.png" type="image/png" />
+  <link rel="stylesheet" href="css/admin.css?v=clients-badge1" />
+  <link rel="icon" href="icons/icon-192.png" type="image/png" />
 </head>
-<body>
+<body class="admin-body">
   <div id="loginView" class="login">
     <div class="login__card" id="apiDownCard" hidden>
       <img src="../assets/logo-header-white.png?v=2" alt="Gjeodeti I.T" class="login__logo" width="200" height="48" />
@@ -24,7 +31,10 @@
         <li>Pastaj: <code>http://127.0.0.1:3000/admin/</code></li>
       </ol>
       <p class="login__error" id="apiDownError" hidden></p>
-      <button type="button" class="btn btn--primary" id="apiRetryBtn">Provo përsëri</button>
+      <div class="login__actions">
+        <a class="btn btn--primary" id="openLocalAdmin" href="http://127.0.0.1:3000/admin/">Hap Admin lokal</a>
+        <button type="button" class="btn btn--ghost" id="apiRetryBtn">Provo përsëri</button>
+      </div>
     </div>
 
     <form class="login__card" id="loginForm">
@@ -58,32 +68,41 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__brand">
         <img src="../assets/logo-header-white.png?v=2" alt="" width="150" height="36" />
-        <span>Admin</span>
+        <strong>GJEODETI I.T.</strong>
+        <span>Saktësi. Profesionalizëm. Besim.</span>
       </div>
       <nav class="sidebar__nav" id="sideNav">
-        <button type="button" class="nav-item is-active" data-view="dashboard">Përmbledhje</button>
+        <button type="button" class="nav-item is-active" data-view="dashboard">Dashboard</button>
+        <button type="button" class="nav-item" data-view="messages">Mesazhet <span class="badge" id="badgeMsg" hidden>0</span></button>
+        <button type="button" class="nav-item" data-view="week">Plani javor</button>
         <button type="button" class="nav-item" data-view="planner">Plani ditor</button>
         <button type="button" class="nav-item" data-view="calendar">Kalendari</button>
-        <button type="button" class="nav-item" data-view="clients">Klientët</button>
-        <button type="button" class="nav-item" data-view="messages">Mesazhet <span class="badge" id="badgeMsg" hidden>0</span></button>
-        <button type="button" class="nav-item" data-view="services">Shërbimet</button>
         <button type="button" class="nav-item" data-view="projects">Projektet</button>
-        <button type="button" class="nav-item" data-view="quotes">Ofertat <span class="badge" id="badgeQuote" hidden>0</span></button>
         <button type="button" class="nav-item" data-view="gallery">Galeria</button>
+        <button type="button" class="nav-item" data-view="clients">Klientët <span class="badge" id="badgeClients" hidden>0</span></button>
+        <button type="button" class="nav-item" data-view="quotes">Ofertat <span class="badge" id="badgeQuote" hidden>0</span></button>
+        <button type="button" class="nav-item" data-view="services">Shërbimet</button>
         <button type="button" class="nav-item" data-view="content">Përmbajtja</button>
         <button type="button" class="nav-item" data-view="settings">Cilësimet</button>
       </nav>
       <div class="sidebar__foot">
+        <button type="button" class="nav-item nav-item--logout" id="logoutBtn">Dil nga llogaria</button>
         <a href="/" target="_blank" rel="noopener">Shiko website-in</a>
       </div>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
-        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
-        <div>
-          <h2 id="pageTitle">Dashboard</h2>
-          <p class="topbar__sub" id="pageSub"></p>
+        <div class="topbar__left">
+          <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+          <div class="topbar__status" title="API aktiv">
+            <span class="topbar__dot"></span>
+            <span>Online</span>
+          </div>
+          <div class="topbar__titles">
+            <h2 id="pageTitle">Dashboard</h2>
+            <p class="topbar__sub" id="pageSub"></p>
+          </div>
         </div>
         <div class="topbar__right">
           <span class="topbar__date" id="topbarDate"></span>
@@ -91,8 +110,13 @@
             <button type="button" class="notify__btn" id="notifyBtn" aria-label="Njoftime">Njoftime <span class="badge" id="badgeNotify">0</span></button>
             <div class="notify__panel" id="notifyPanel" hidden></div>
           </div>
-          <span class="admin-name" id="adminName">—</span>
-          <button type="button" class="btn btn--ghost" id="logoutBtn">Dil</button>
+          <div class="topbar__user">
+            <div>
+              <strong id="adminName">—</strong>
+              <span>Administrator</span>
+            </div>
+            <span class="topbar__avatar" id="adminAvatar">A</span>
+          </div>
         </div>
       </header>
       <main class="main" id="main"></main>
@@ -104,6 +128,27 @@
     <div class="modal__card" id="modalCard"></div>
   </div>
 
-  <script src="js/admin.js?v=login5"></script>
+  <div class="dash-intro" id="dashIntro" hidden>
+    <div class="dash-intro__slide dash-intro__welcome is-active" data-intro-slide="0">
+      <div class="intro-glow" aria-hidden="true"></div>
+      <div class="intro-rings" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="intro-mountains" aria-hidden="true">
+        <span class="intro-peak intro-peak--back"></span>
+        <span class="intro-peak intro-peak--mid"></span>
+        <span class="intro-peak intro-peak--front"></span>
+      </div>
+      <div class="intro-welcome-copy">
+        <p class="intro-welcome-kicker"><span></span>Mirë se vini<span></span></p>
+        <h2 class="intro-welcome-name" id="introWelcomeName">Ibrahim</h2>
+        <div class="intro-welcome-wave" aria-hidden="true"></div>
+        <p class="intro-welcome-sub">Gjeodeti I.T · Paneli i punës</p>
+      </div>
+    </div>
+    <button type="button" class="dash-intro__skip" id="dashIntroSkip">Anulo</button>
+  </div>
+
+  <script src="js/admin.js?v=clients-badge1"></script>
 </body>
 </html>
