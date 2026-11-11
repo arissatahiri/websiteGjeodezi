@@ -1,24 +1,31 @@
 const fs = require("fs");
 const path = require("path");
 
-const IS_CLOUD =
-  !!(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
-const dataDir = IS_CLOUD ? path.join("/tmp", "gjeodeti-data") : path.join(__dirname, "..", "data");
+const IS_CLOUD = !!(
+  process.env.NETLIFY ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.DB_MODE === "sqlite" && /[/\\]var[/\\]task\b/i.test(__dirname)
+);
+/* Në Netlify/Lambda filesystem është read-only — vetëm /tmp shkruhet */
+const dataDir = IS_CLOUD
+  ? path.join("/tmp", "gjeodeti-data")
+  : path.join(__dirname, "..", "data");
 const uploadsDir = IS_CLOUD
   ? path.join("/tmp", "gjeodeti-uploads")
   : path.join(__dirname, "..", "uploads");
 const sqliteFile = path.join(IS_CLOUD ? "/tmp" : dataDir, "gjeodeti.db");
 
-try {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-  ["gallery", "services", "projects"].forEach((d) => {
-    const p = path.join(uploadsDir, d);
+function ensureDir(p) {
+  try {
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-  });
-} catch (err) {
-  console.warn("mkdir data/uploads:", err.message);
+  } catch (err) {
+    console.warn("mkdir failed:", p, err.message);
+  }
 }
+ensureDir(dataDir);
+ensureDir(uploadsDir);
+["gallery", "services", "projects"].forEach((d) => ensureDir(path.join(uploadsDir, d)));
 
 const DB_CONFIG = {
   host: process.env.DB_HOST || "127.0.0.1",
