@@ -4,7 +4,11 @@
  */
 const serverless = require("serverless-http");
 
+/* Detekto cloud PARA se të ngarkohet server/db.js (mkdir /tmp) */
 process.env.DB_MODE = process.env.DB_MODE || "sqlite";
+process.env.NETLIFY = process.env.NETLIFY || "true";
+process.env.AWS_LAMBDA_FUNCTION_NAME =
+  process.env.AWS_LAMBDA_FUNCTION_NAME || "gjeodeti-api";
 
 let cached;
 

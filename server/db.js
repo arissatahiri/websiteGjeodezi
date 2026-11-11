@@ -1,11 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 
+const LOOKS_LIKE_LAMBDA = /[/\\](var[/\\]task|netlify[/\\]functions)\b/i.test(__dirname);
 const IS_CLOUD = !!(
   process.env.NETLIFY ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
   process.env.LAMBDA_TASK_ROOT ||
-  process.env.DB_MODE === "sqlite" && /[/\\]var[/\\]task\b/i.test(__dirname)
+  LOOKS_LIKE_LAMBDA
 );
 /* Në Netlify/Lambda filesystem është read-only — vetëm /tmp shkruhet */
 const dataDir = IS_CLOUD
