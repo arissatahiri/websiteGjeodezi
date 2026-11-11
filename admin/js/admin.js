@@ -9,6 +9,7 @@
     calendar: "Kalendari",
     messages: "Mesazhet",
     clients: "Klientët",
+    finance: "Financa",
     services: "Shërbimet",
     projects: "Projektet",
     quotes: "Ofertat",
@@ -483,6 +484,7 @@
       else if (view === "calendar") await renderCalendar(main);
       else if (view === "messages") await renderMessages(main);
       else if (view === "clients") await renderClients(main);
+      else if (view === "finance") await renderFinance(main);
       else if (view === "services") await renderServices(main);
       else if (view === "projects") await renderProjects(main);
       else if (view === "quotes") await renderQuotes(main);
@@ -733,7 +735,7 @@
 
       <div class="dash-actions">
         <button type="button" class="dash-action dash-action--blue" data-go="projects"><span>＋</span> Shto Projekt</button>
-        <button type="button" class="dash-action dash-action--green" data-go="gallery"><span>＋</span> Shto Foto</button>
+        <button type="button" class="dash-action dash-action--green" data-go="finance"><span>€</span> Financa</button>
         <button type="button" class="dash-action dash-action--purple" data-go="messages"><span>✉</span> Shiko Mesazhet</button>
         <button type="button" class="dash-action dash-action--teal" data-go="settings"><span>⚙</span> Cilësimet</button>
       </div>`;
@@ -1230,6 +1232,136 @@
     };
     $("#msgQ").oninput = $("#msgStatus").onchange = paint;
     await paint();
+  }
+
+  function money(n) {
+    const v = Number(n) || 0;
+    return `${v.toLocaleString("sq-XK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  }
+
+  /* -------- Financa -------- */
+  let financeMonth = todayISO().slice(0, 7);
+
+  async function renderFinance(main) {
+    $("#pageSub").textContent = "Të ardhura dhe shpenzime";
+    const data = await api(`/api/finances?month=${encodeURIComponent(financeMonth)}`);
+    const rows = data.rows || [];
+    const s = data.summary || { income: 0, expense: 0, balance: 0 };
+    main.innerHTML = `
+      <div class="dash-kpis" style="margin-bottom:1rem">
+        <article class="dash-kpi" style="cursor:default">
+          <span class="dash-kpi__icon dash-kpi__icon--green">↑</span>
+          <span class="dash-kpi__body"><strong>${esc(money(s.income))}</strong><em>Të ardhura</em></span>
+        </article>
+        <article class="dash-kpi" style="cursor:default">
+          <span class="dash-kpi__icon dash-kpi__icon--purple">↓</span>
+          <span class="dash-kpi__body"><strong>${esc(money(s.expense))}</strong><em>Shpenzime</em></span>
+        </article>
+        <article class="dash-kpi" style="cursor:default">
+          <span class="dash-kpi__icon dash-kpi__icon--blue">Σ</span>
+          <span class="dash-kpi__body"><strong>${esc(money(s.balance))}</strong><em>Bilanci</em></span>
+        </article>
+        <article class="dash-kpi" style="cursor:default">
+          <span class="dash-kpi__icon dash-kpi__icon--teal">#</span>
+          <span class="dash-kpi__body"><strong>${rows.length}</strong><em>Regjistrime</em></span>
+        </article>
+      </div>
+      <div class="panel__head" style="margin-bottom:1rem;gap:0.65rem;flex-wrap:wrap">
+        <label class="toolbar" style="margin:0">
+          <span class="task-card__meta">Muaji</span>
+          <input type="month" id="financeMonth" value="${esc(financeMonth)}" />
+        </label>
+        <button class="btn btn--ghost" id="addIncome">+ E ardhur</button>
+        <button class="btn btn--primary" id="addExpense">+ Shpenzim</button>
+      </div>
+      <div class="panel table-wrap"><table>
+        <thead><tr><th>Data</th><th>Lloji</th><th>Titulli</th><th>Kategoria</th><th>Shuma</th><th></th></tr></thead>
+        <tbody>${
+          rows.length
+            ? rows
+                .map((r) => {
+                  const isIn = r.entry_type === "income";
+                  return `<tr>
+              <td>${esc(r.entry_date)}</td>
+              <td><span class="chip ${isIn ? "chip--done" : "chip--urgent"}">${isIn ? "E ardhur" : "Shpenzim"}</span></td>
+              <td><strong>${esc(r.title)}</strong>${r.notes ? `<div class="task-card__meta">${esc(r.notes)}</div>` : ""}</td>
+              <td>${esc(r.category || "—")}</td>
+              <td style="font-weight:700;color:${isIn ? "var(--ok)" : "var(--danger)"}">${isIn ? "+" : "−"}${esc(money(r.amount))}</td>
+              <td class="row-actions">
+                <button class="btn btn--ghost" data-edit-fin='${esc(JSON.stringify(r))}'>Ndrysho</button>
+                <button class="btn btn--danger" data-del-fin="${r.id}">Fshi</button>
+              </td>
+            </tr>`;
+                })
+                .join("")
+            : `<tr><td colspan="6"><p class="empty">Nuk ka regjistrime për këtë muaj.</p></td></tr>`
+        }</tbody>
+      </table></div>`;
+    $("#financeMonth").onchange = () => {
+      financeMonth = $("#financeMonth").value || todayISO().slice(0, 7);
+      render();
+    };
+    $("#addIncome").onclick = () => openFinanceModal({ entry_type: "income" });
+    $("#addExpense").onclick = () => openFinanceModal({ entry_type: "expense" });
+    $$("[data-edit-fin]").forEach((b) => {
+      b.onclick = () => openFinanceModal(JSON.parse(b.dataset.editFin));
+    });
+    $$("[data-del-fin]").forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm("Të fshihet regjistrimi?")) return;
+        await api(`/api/finances/${b.dataset.delFin}`, { method: "DELETE" });
+        render();
+      };
+    });
+  }
+
+  function openFinanceModal(row = null) {
+    const x = row || {
+      entry_type: "income",
+      title: "",
+      amount: "",
+      category: "",
+      entry_date: todayISO(),
+      notes: "",
+    };
+    openModal(`
+      <h3>${row?.id ? "Ndrysho regjistrimin" : "Regjistrim i ri"}</h3>
+      <form class="form-grid" id="financeForm">
+        <label><span>Lloji</span>
+          <select name="entry_type">
+            <option value="income" ${x.entry_type === "income" ? "selected" : ""}>E ardhur</option>
+            <option value="expense" ${x.entry_type === "expense" ? "selected" : ""}>Shpenzim</option>
+          </select>
+        </label>
+        <label><span>Titulli</span><input name="title" required value="${esc(x.title || "")}" placeholder="p.sh. Pagesë klienti / Karburant" /></label>
+        <label><span>Shuma (€)</span><input name="amount" type="number" min="0" step="0.01" required value="${esc(x.amount ?? "")}" /></label>
+        <label><span>Data</span><input name="entry_date" type="date" required value="${esc(x.entry_date || todayISO())}" /></label>
+        <label><span>Kategoria</span><input name="category" value="${esc(x.category || "")}" placeholder="p.sh. Projekt, Transport, Pajisje" /></label>
+        <label><span>Shënime</span><textarea name="notes" rows="2">${esc(x.notes || "")}</textarea></label>
+        <div class="row-actions">
+          <button class="btn btn--primary">Ruaj</button>
+          <button type="button" class="btn btn--ghost" data-close>Anulo</button>
+        </div>
+      </form>`);
+    $("#financeForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        entry_type: fd.get("entry_type"),
+        title: fd.get("title"),
+        amount: fd.get("amount"),
+        entry_date: fd.get("entry_date"),
+        category: fd.get("category"),
+        notes: fd.get("notes"),
+      };
+      if (row?.id) {
+        await api(`/api/finances/${row.id}`, { method: "PUT", body });
+      } else {
+        await api("/api/finances", { method: "POST", body });
+      }
+      closeModal();
+      render();
+    };
   }
 
   /* -------- Clients -------- */
@@ -1772,11 +1904,15 @@
     input.focus();
   });
 
-  /* Auto-hyrje → hapet drejt dashboardi (pa formular login) */
-  const AUTO_ADMIN_EMAIL = "tahiriibrahim97@gmail.com";
-  const AUTO_ADMIN_PASS = "gjeodeti1";
-
-  async function tryAutoEnter() {
+  /* -------- Auth / boot -------- */
+  async function bootAdmin() {
+    ensureAdminServiceWorker().catch(() => {});
+    const health = await checkApi();
+    if (!health.ok) {
+      showApiDown(health.error);
+      return false;
+    }
+    showLoginForm();
     try {
       const res = await fetch("/api/auth/me", {
         credentials: "same-origin",
@@ -1788,34 +1924,8 @@
         return true;
       }
     } catch {
-      /* continue */
+      /* pa sesion → login */
     }
-    try {
-      const data = await api("/api/auth/login", {
-        method: "POST",
-        body: { email: AUTO_ADMIN_EMAIL, password: AUTO_ADMIN_PASS },
-      });
-      if (data?.admin) {
-        await enterApp(data.admin);
-        return true;
-      }
-    } catch {
-      /* fallback te login */
-    }
-    return false;
-  }
-
-  /* -------- Auth / boot -------- */
-  async function bootAdmin() {
-    ensureAdminServiceWorker().catch(() => {});
-    const health = await checkApi();
-    if (!health.ok) {
-      showApiDown(health.error);
-      return false;
-    }
-    /* Mos e shfaq login — provo drejt dashboardin */
-    $("#loginView").hidden = true;
-    if (await tryAutoEnter()) return true;
     showLoginForm();
     $("#loginPass")?.focus();
     return false;
@@ -1876,9 +1986,7 @@
       /* ignore */
     }
     admin = null;
-    /* Pas diljes, hy përsëri automatikisht në dashboard */
-    $("#loginView").hidden = true;
-    if (!(await tryAutoEnter())) showLoginForm();
+    showLoginForm();
   });
 
   $("#notifyBtn")?.addEventListener("click", async () => {
