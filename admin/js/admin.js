@@ -1772,15 +1772,11 @@
     input.focus();
   });
 
-  /* -------- Auth / boot -------- */
-  async function bootAdmin() {
-    ensureAdminServiceWorker().catch(() => {});
-    const health = await checkApi();
-    if (!health.ok) {
-      showApiDown(health.error);
-      return false;
-    }
-    showLoginForm();
+  /* Auto-hyrje → hapet drejt dashboardi (pa formular login) */
+  const AUTO_ADMIN_EMAIL = "tahiriibrahim97@gmail.com";
+  const AUTO_ADMIN_PASS = "gjeodeti1";
+
+  async function tryAutoEnter() {
     try {
       const res = await fetch("/api/auth/me", {
         credentials: "same-origin",
@@ -1792,8 +1788,34 @@
         return true;
       }
     } catch {
-      /* session e skaduar → forma e login */
+      /* continue */
     }
+    try {
+      const data = await api("/api/auth/login", {
+        method: "POST",
+        body: { email: AUTO_ADMIN_EMAIL, password: AUTO_ADMIN_PASS },
+      });
+      if (data?.admin) {
+        await enterApp(data.admin);
+        return true;
+      }
+    } catch {
+      /* fallback te login */
+    }
+    return false;
+  }
+
+  /* -------- Auth / boot -------- */
+  async function bootAdmin() {
+    ensureAdminServiceWorker().catch(() => {});
+    const health = await checkApi();
+    if (!health.ok) {
+      showApiDown(health.error);
+      return false;
+    }
+    /* Mos e shfaq login — provo drejt dashboardin */
+    $("#loginView").hidden = true;
+    if (await tryAutoEnter()) return true;
     showLoginForm();
     $("#loginPass")?.focus();
     return false;
@@ -1854,7 +1876,9 @@
       /* ignore */
     }
     admin = null;
-    showLoginForm();
+    /* Pas diljes, hy përsëri automatikisht në dashboard */
+    $("#loginView").hidden = true;
+    if (!(await tryAutoEnter())) showLoginForm();
   });
 
   $("#notifyBtn")?.addEventListener("click", async () => {
